@@ -4,6 +4,13 @@ import { Boxes, Search, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { PublicTopBar } from "@/components/layout/PublicTopBar"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
@@ -63,6 +70,7 @@ export default function ModelCatalog() {
   const [sortOrder, setSortOrder] = useState<SortOrder>("name_asc")
   const [providerFilter, setProviderFilter] = useState("")
   const [channelFilter, setChannelFilter] = useState("")
+  const [selectedModel, setSelectedModel] = useState<ModelView | null>(null)
 
   const { data: settings } = useQuery<PublicSettings>({
     queryKey: ["public-settings"],
@@ -167,7 +175,19 @@ export default function ModelCatalog() {
         ) : (
           <div className="grid gap-4">
             {filteredModels.map((item) => (
-              <Card key={item.model_name}>
+              <Card
+                key={item.model_name}
+                className="cursor-pointer transition-colors hover:border-primary/60 hover:bg-muted/20"
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedModel(item)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    setSelectedModel(item)
+                  }
+                }}
+              >
                 <CardHeader className="space-y-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
@@ -181,38 +201,15 @@ export default function ModelCatalog() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <div className="min-w-[840px] rounded-md border">
-                      <div className="grid grid-cols-[1fr_110px_150px_150px_150px] border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
-                        <div>{copy.userChannel}</div>
-                        <div>{copy.multiplier}</div>
-                        <div>{copy.effectiveInput}</div>
-                        <div>{copy.effectiveOutput}</div>
-                        <div>{copy.effectiveCachedInput}</div>
-                      </div>
-                      {item.visible_user_channels.map((channel) => (
-                        <div key={channel.id} className="grid grid-cols-[1fr_110px_150px_150px_150px] items-center border-b px-3 py-3 text-sm last:border-b-0">
-                          <div className="min-w-0">
-                            <div className="truncate font-medium">{channel.name}</div>
-                            {channel.description && (
-                              <div className="truncate text-xs text-muted-foreground">{channel.description}</div>
-                            )}
-                          </div>
-                          <div>{formatMultiplier(channel.multiplier)}</div>
-                          <PriceText value={channel.effective_input_price} tiers={channel.effective_input_price_tiers} />
-                          <PriceText value={channel.effective_output_price} tiers={channel.effective_output_price_tiers} />
-                          <PriceText value={channel.effective_cached_input_price} tiers={channel.effective_cached_input_price_tiers} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                <CardContent className="pt-0">
+                  <div className="text-xs text-muted-foreground">{detailCopy(copy).openDetails}</div>
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
       </main>
+      <ModelDetailDialog model={selectedModel} copy={copy} onClose={() => setSelectedModel(null)} />
       {publicSettings.footer_text && (
         <footer className="border-t px-4 py-4 text-center text-sm text-muted-foreground sm:px-6">
           {publicSettings.footer_text}
@@ -220,6 +217,92 @@ export default function ModelCatalog() {
       )}
     </div>
   )
+}
+
+function ModelDetailDialog({
+  model,
+  copy,
+  onClose,
+}: {
+  model: ModelView | null
+  copy: typeof zhCopy
+  onClose: () => void
+}) {
+  return (
+    <Dialog open={Boolean(model)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[85vh] w-[calc(100vw-2rem)] max-w-5xl overflow-y-auto">
+        {model && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="break-all font-mono">{model.model_name}</DialogTitle>
+              <DialogDescription>{detailCopy(copy).detailSubtitle}</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-center gap-3">
+                <Provider providerName={model.provider_name} iconURL={model.provider_icon_url} />
+              </div>
+
+              <section className="space-y-3">
+                <div className="text-sm font-medium">{detailCopy(copy).basePricing}</div>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <PriceBox label={copy.inputPrice} value={model.input_price} tiers={model.input_price_tiers} showTiers />
+                  <PriceBox label={copy.outputPrice} value={model.output_price} tiers={model.output_price_tiers} showTiers />
+                  <PriceBox label={copy.cachedInputPrice} value={model.cached_input_price} tiers={model.cached_input_price_tiers} showTiers />
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <div className="text-sm font-medium">{detailCopy(copy).channelPricing}</div>
+                <div className="overflow-x-auto">
+                  <div className="min-w-[840px] rounded-md border">
+                    <div className="grid grid-cols-[1fr_110px_150px_150px_150px] border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+                      <div>{copy.userChannel}</div>
+                      <div>{copy.multiplier}</div>
+                      <div>{copy.effectiveInput}</div>
+                      <div>{copy.effectiveOutput}</div>
+                      <div>{copy.effectiveCachedInput}</div>
+                    </div>
+                    {model.visible_user_channels.map((channel) => (
+                      <div key={channel.id} className="grid grid-cols-[1fr_110px_150px_150px_150px] items-center border-b px-3 py-3 text-sm last:border-b-0">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{channel.name}</div>
+                          {channel.description && (
+                            <div className="truncate text-xs text-muted-foreground">{channel.description}</div>
+                          )}
+                        </div>
+                        <div>{formatMultiplier(channel.multiplier)}</div>
+                        <PriceText value={channel.effective_input_price} tiers={channel.effective_input_price_tiers} />
+                        <PriceText value={channel.effective_output_price} tiers={channel.effective_output_price_tiers} />
+                        <PriceText value={channel.effective_cached_input_price} tiers={channel.effective_cached_input_price_tiers} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function detailCopy(copy: typeof zhCopy) {
+  if (copy === zhCopy) {
+    return {
+      openDetails: "点击查看详细信息",
+      detailSubtitle: "模型基础计价、分段计价和用户渠道价格",
+      basePricing: "基础计价",
+      channelPricing: "用户渠道计价",
+    }
+  }
+  return {
+    openDetails: "Click to view details",
+    detailSubtitle: "Base pricing, tiered pricing, and user channel prices",
+    basePricing: "Base pricing",
+    channelPricing: "User channel pricing",
+  }
 }
 
 function Provider({ providerName, iconURL }: { providerName: string; iconURL: string }) {
@@ -231,12 +314,22 @@ function Provider({ providerName, iconURL }: { providerName: string; iconURL: st
   )
 }
 
-function PriceBox({ label, value, tiers }: { label: string; value: string | number; tiers?: PriceTier[] }) {
+function PriceBox({
+  label,
+  value,
+  tiers,
+  showTiers = false,
+}: {
+  label: string
+  value: string | number
+  tiers?: PriceTier[]
+  showTiers?: boolean
+}) {
   return (
     <div className="rounded-md border px-3 py-2">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 font-mono text-sm font-semibold">{formatPrice(value)}</div>
-      <TierSummary tiers={tiers} />
+      {showTiers && <TierSummary tiers={tiers} />}
     </div>
   )
 }

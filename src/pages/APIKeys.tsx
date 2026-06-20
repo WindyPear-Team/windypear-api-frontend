@@ -29,6 +29,8 @@ interface APIKey {
   allowed_models: string[]
   allowed_user_channels: number[]
   allowed_ips: string[]
+  quota_limit: string | number
+  quota_remaining?: string | number | null
   enabled: boolean
   usage: UsageStats
   last_used_at?: string | null
@@ -53,6 +55,7 @@ interface APIKeyPayload {
   allowed_models: string[]
   allowed_user_channels: number[]
   allowed_ips: string[]
+  quota_limit?: string
   enabled?: boolean
 }
 
@@ -66,6 +69,7 @@ export default function APIKeys() {
   const [newChannelId, setNewChannelId] = useState(0)
   const [newModels, setNewModels] = useState<string[]>([])
   const [newIPs, setNewIPs] = useState("")
+  const [newQuotaLimit, setNewQuotaLimit] = useState("")
 
   const { data: catalog = [] } = useQuery<UserChannelCatalog[]>({
     queryKey: ["catalog"],
@@ -90,6 +94,7 @@ export default function APIKeys() {
         allowed_models: newModels,
         allowed_user_channels: newChannelId ? [newChannelId] : [],
         allowed_ips: parseCSV(newIPs),
+        quota_limit: parseQuotaLimit(newQuotaLimit),
       }
       const res = await api.post("/user/api-keys", payload)
       return res.data
@@ -101,6 +106,7 @@ export default function APIKeys() {
       setNewChannelId(0)
       setNewModels([])
       setNewIPs("")
+      setNewQuotaLimit("")
       queryClient.invalidateQueries({ queryKey: ["api-keys"] })
     },
     onError: () => setStatus(t("settings.keyCreateFailed")),
@@ -150,6 +156,7 @@ export default function APIKeys() {
     setNewChannelId(0)
     setNewModels([])
     setNewIPs("")
+    setNewQuotaLimit("")
   }
 
   return (
@@ -211,6 +218,16 @@ export default function APIKeys() {
             <FieldLabel label={t("settings.allowedIPs")}>
               <Input value={newIPs} onChange={(e) => setNewIPs(e.target.value)} placeholder={t("settings.ipsPlaceholder")} />
             </FieldLabel>
+            <FieldLabel label={t("settings.quotaLimit")}>
+              <Input
+                type="number"
+                min="0"
+                step="0.000001"
+                value={newQuotaLimit}
+                onChange={(e) => setNewQuotaLimit(e.target.value)}
+                placeholder={t("settings.quotaPlaceholder")}
+              />
+            </FieldLabel>
           </div>
 
           {newRawKey && (
@@ -265,12 +282,14 @@ function APIKeyRow({
   const [channelId, setChannelId] = useState(allowedChannels[0] || 0)
   const [models, setModels] = useState(allowedModels)
   const [ips, setIPs] = useState(allowedIPs.join(","))
+  const [quotaLimit, setQuotaLimit] = useState(quotaInputValue(apiKey.quota_limit))
 
   const payload = (enabled = apiKey.enabled): APIKeyPayload => ({
     name,
     allowed_models: models,
     allowed_user_channels: channelId ? [channelId] : [],
     allowed_ips: parseCSV(ips),
+    quota_limit: parseQuotaLimit(quotaLimit),
     enabled,
   })
 
@@ -279,6 +298,7 @@ function APIKeyRow({
     setChannelId(numberArray(apiKey.allowed_user_channels)[0] || 0)
     setModels(stringArray(apiKey.allowed_models))
     setIPs(stringArray(apiKey.allowed_ips).join(","))
+    setQuotaLimit(quotaInputValue(apiKey.quota_limit))
   }
 
   const saveConfig = () => {
@@ -316,11 +336,12 @@ function APIKeyRow({
         })}
       </div>
 
-      <div className="grid gap-2 text-sm sm:grid-cols-4">
+      <div className="grid gap-2 text-sm sm:grid-cols-5">
         <UsageBox label={t("settings.requests")} value={formatInteger(apiKey.usage.request_count)} />
         <UsageBox label={t("settings.totalTokens")} value={formatInteger(apiKey.usage.total_tokens)} />
         <UsageBox label={t("settings.inputTokens")} value={formatInteger(apiKey.usage.input_tokens)} />
         <UsageBox label={t("settings.totalCost")} value={formatCost(apiKey.usage.total_cost)} />
+        <UsageBox label={t("settings.quotaRemaining")} value={formatQuotaRemaining(apiKey, t("settings.unlimitedQuota"))} />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -363,6 +384,16 @@ function APIKeyRow({
             />
             <FieldLabel label={t("settings.allowedIPs")}>
               <Input value={ips} onChange={(e) => setIPs(e.target.value)} placeholder={t("settings.ipsPlaceholder")} />
+            </FieldLabel>
+            <FieldLabel label={t("settings.quotaLimit")}>
+              <Input
+                type="number"
+                min="0"
+                step="0.000001"
+                value={quotaLimit}
+                onChange={(e) => setQuotaLimit(e.target.value)}
+                placeholder={t("settings.quotaPlaceholder")}
+              />
             </FieldLabel>
           </div>
 
@@ -510,6 +541,9 @@ function normalizeAPIKey(value: unknown): APIKey {
     allowed_models: stringArray(item.allowed_models),
     allowed_user_channels: numberArray(item.allowed_user_channels),
     allowed_ips: stringArray(item.allowed_ips),
+    quota_limit: typeof item.quota_limit === "string" || typeof item.quota_limit === "number" ? item.quota_limit : 0,
+    quota_remaining:
+      typeof item.quota_remaining === "string" || typeof item.quota_remaining === "number" ? item.quota_remaining : null,
     enabled: Boolean(item.enabled),
     usage: normalizeUsage(item.usage),
     last_used_at: typeof item.last_used_at === "string" ? item.last_used_at : null,
@@ -538,4 +572,34 @@ function formatInteger(value: number) {
 function formatCost(value: string | number) {
   const parsed = Number(value || 0)
   return `$${(Number.isFinite(parsed) ? parsed : 0).toFixed(6)}`
+}
+
+function parseQuotaLimit(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return "0"
+  }
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return "0"
+  }
+  return trimmed
+}
+
+function quotaInputValue(value: string | number) {
+  const parsed = Number(value || 0)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return ""
+  }
+  return String(value)
+}
+
+function formatQuotaRemaining(apiKey: APIKey, unlimitedLabel: string) {
+  const limit = Number(apiKey.quota_limit || 0)
+  if (!Number.isFinite(limit) || limit <= 0) {
+    return unlimitedLabel
+  }
+  const remaining = Number(apiKey.quota_remaining ?? Math.max(0, limit - Number(apiKey.usage.total_cost || 0)))
+  const safeRemaining = Number.isFinite(remaining) ? Math.max(0, remaining) : 0
+  return `$${safeRemaining.toFixed(6)} / $${limit.toFixed(6)}`
 }
