@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
+import { TabTransition } from "@/components/layout/TabTransition"
 import {
   Table,
   TableBody,
@@ -90,9 +91,11 @@ export default function Logs() {
         </Button>
       </div>
 
-      {activeTab === "calls" && <CallRecordsTable logs={logs} loading={isLogsLoading} t={t} />}
-      {activeTab === "payments" && <PaymentOrdersTable orders={paymentOrders} loading={isPaymentOrdersLoading} copy={copy} />}
-      {activeTab === "checkIns" && <CheckInRecordsTable records={checkInRecords} loading={isCheckInRecordsLoading} copy={copy} />}
+      <TabTransition activeKey={activeTab} order={["calls", "payments", "checkIns"]}>
+        {activeTab === "calls" && <CallRecordsTable logs={logs} loading={isLogsLoading} t={t} />}
+        {activeTab === "payments" && <PaymentOrdersTable orders={paymentOrders} loading={isPaymentOrdersLoading} copy={copy} />}
+        {activeTab === "checkIns" && <CheckInRecordsTable records={checkInRecords} loading={isCheckInRecordsLoading} copy={copy} />}
+      </TabTransition>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { Sidebar } from "./Sidebar"
+import { PageTransition } from "./PageTransition"
 import { Menu, UserCircle, X } from "lucide-react"
 import { Link, Outlet } from "react-router-dom"
 import { useState } from "react"
@@ -89,7 +90,9 @@ export function Layout() {
             </div>
           )}
           <div className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 lg:p-8">
-            <Outlet />
+            <PageTransition>
+              <Outlet />
+            </PageTransition>
           </div>
           {publicSettings.footer_text && (
             <footer className="border-t px-4 py-4 text-center text-sm text-muted-foreground sm:px-6 lg:px-8">

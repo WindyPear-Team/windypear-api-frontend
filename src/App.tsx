@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { useEffect, useState } from "react"
 import { useQuery, QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { Layout } from "./components/layout/Layout"
+import { PageTransition } from "./components/layout/PageTransition"
 import Dashboard from "./pages/Dashboard"
 import DataBoard from "./pages/DataBoard"
 import Channels from "./pages/Channels"
@@ -242,14 +243,14 @@ function App() {
           <DocumentTitle />
           <SetupGate>
             <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/setup" element={<Setup />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/models" element={<ModelCatalog />} />
-              <Route path="/status" element={<StatusPage />} />
-              <Route path="/about" element={<PublicContent kind="about" />} />
-              <Route path="/privacy" element={<PublicContent kind="privacy" />} />
-              <Route path="/terms" element={<PublicContent kind="terms" />} />
+              <Route path="/" element={<PageTransition><Home /></PageTransition>} />
+              <Route path="/setup" element={<PageTransition><Setup /></PageTransition>} />
+              <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
+              <Route path="/models" element={<PageTransition><ModelCatalog /></PageTransition>} />
+              <Route path="/status" element={<PageTransition><StatusPage /></PageTransition>} />
+              <Route path="/about" element={<PageTransition><PublicContent kind="about" /></PageTransition>} />
+              <Route path="/privacy" element={<PageTransition><PublicContent kind="privacy" /></PageTransition>} />
+              <Route path="/terms" element={<PageTransition><PublicContent kind="terms" /></PageTransition>} />
               <Route
                 path="/dashboard"
                 element={
