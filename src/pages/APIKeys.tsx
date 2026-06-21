@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Copy, Plus, Save, Trash } from "lucide-react"
+import { Copy, Plus, RotateCw, Save, Trash } from "lucide-react"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -26,6 +26,7 @@ interface UserChannelCatalog {
 interface APIKey {
   id: number
   name: string
+  api_key: string
   key_prefix: string
   allowed_models: string[]
   allowed_user_channels: number[]
@@ -136,6 +137,19 @@ export default function APIKeys() {
     onError: () => error(t("settings.keyDeleteFailed")),
   })
 
+  const rotateAPIKey = useMutation<CreateAPIKeyResponse, Error, number>({
+    mutationFn: async (id) => {
+      const res = await api.post(`/user/api-keys/${id}/rotate`)
+      return res.data
+    },
+    onSuccess: (data) => {
+      setNewRawKey(data.api_key)
+      success(t("settings.keyRotated"))
+      queryClient.invalidateQueries({ queryKey: ["api-keys"] })
+    },
+    onError: () => error(t("settings.keyRotateFailed")),
+  })
+
   const copyValue = async (value: string) => {
     if (!value) {
       return
@@ -187,6 +201,8 @@ export default function APIKeys() {
                 catalog={catalog}
                 onSave={(id, payload) => updateAPIKey.mutate({ id, payload })}
                 onDelete={(id) => deleteAPIKey.mutate(id)}
+                onRotate={(id) => rotateAPIKey.mutate(id)}
+                onCopy={copyValue}
               />
             ))
           )}
@@ -232,7 +248,7 @@ export default function APIKeys() {
           {newRawKey && (
             <div className="space-y-2 rounded-md border p-3">
               <div className="text-sm font-medium">{t("settings.newKey")}</div>
-              <div className="text-xs text-muted-foreground">{t("settings.onlyShownOnce")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.keyStored")}</div>
               <div className="flex gap-2">
                 <Input readOnly value={newRawKey} className="font-mono text-xs" placeholder={t("settings.newKey")} />
                 <Button variant="outline" size="icon" onClick={() => copyValue(newRawKey)} title={t("settings.copyKey")}>
@@ -264,11 +280,15 @@ function APIKeyRow({
   catalog,
   onSave,
   onDelete,
+  onRotate,
+  onCopy,
 }: {
   apiKey: APIKey
   catalog: UserChannelCatalog[]
   onSave: (id: number, payload: APIKeyPayload) => void
   onDelete: (id: number) => void
+  onRotate: (id: number) => void
+  onCopy: (value: string) => void
 }) {
   const { t } = useI18n()
   const [isConfigOpen, setIsConfigOpen] = useState(false)
@@ -323,6 +343,22 @@ function APIKeyRow({
             <Trash size={14} />
           </Button>
         </div>
+      </div>
+
+      <div className="flex gap-2">
+        <Input readOnly value={apiKey.api_key || apiKey.key_prefix} className="font-mono text-xs" />
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => onCopy(apiKey.api_key)}
+          title={t("settings.copyKey")}
+          disabled={!apiKey.api_key}
+        >
+          <Copy size={16} />
+        </Button>
+        <Button variant="outline" size="icon" onClick={() => onRotate(apiKey.id)} title={t("settings.rotateKey")}>
+          <RotateCw size={16} />
+        </Button>
       </div>
 
       <div className="text-sm text-muted-foreground">
@@ -534,6 +570,7 @@ function normalizeAPIKey(value: unknown): APIKey {
   return {
     id: Number(item.id || 0),
     name: typeof item.name === "string" ? item.name : "",
+    api_key: typeof item.api_key === "string" ? item.api_key : "",
     key_prefix: typeof item.key_prefix === "string" ? item.key_prefix : "",
     allowed_models: stringArray(item.allowed_models),
     allowed_user_channels: numberArray(item.allowed_user_channels),

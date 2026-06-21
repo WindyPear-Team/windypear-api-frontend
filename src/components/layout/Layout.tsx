@@ -1,6 +1,6 @@
 import { Sidebar } from "./Sidebar"
 import { PageTransition } from "./PageTransition"
-import { Menu, UserCircle, X } from "lucide-react"
+import { Menu, UserCircle } from "lucide-react"
 import { Link, Outlet } from "react-router-dom"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -38,7 +38,14 @@ export function Layout() {
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <Button className="lg:hidden" variant="outline" size="icon" onClick={() => setIsSidebarOpen(true)} aria-label="Open menu">
+          <Button
+            className="lg:hidden"
+            variant="outline"
+            size="icon"
+            onClick={() => setIsSidebarOpen((open) => !open)}
+            aria-label={isSidebarOpen ? "Close menu" : "Open menu"}
+            aria-expanded={isSidebarOpen}
+          >
             <Menu size={18} />
           </Button>
           <Brand settings={publicSettings} />
@@ -71,15 +78,6 @@ export function Layout() {
             <div className="relative z-50 h-full w-72 max-w-[85vw]">
               <Sidebar className="w-full" onNavigate={() => setIsSidebarOpen(false)} />
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              className="absolute right-4 top-4 z-50 bg-background"
-              onClick={() => setIsSidebarOpen(false)}
-              aria-label="Close menu"
-            >
-              <X size={18} />
-            </Button>
           </div>
         )}
 

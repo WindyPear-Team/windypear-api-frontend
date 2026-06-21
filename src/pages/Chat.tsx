@@ -5,7 +5,6 @@ import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 
@@ -13,6 +12,15 @@ interface UserChannelCatalog {
   id: number
   name: string
   models: string[]
+}
+
+interface APIKey {
+  id: number
+  name: string
+  api_key: string
+  key_prefix: string
+  allowed_models: string[]
+  enabled: boolean
 }
 
 interface ChatMessage {
@@ -38,6 +46,7 @@ const legacyMessagesStoreKey = "windypear.chat.messages.v1"
 const selectedSessionStoreKey = "windypear.chat.selected_session.v1"
 const modelStoreKey = "windypear.chat.model.v1"
 const endpointStoreKey = "windypear.chat.endpoint.v1"
+const apiKeyStoreKey = "windypear.chat.api_key_id.v1"
 
 export default function Chat() {
   const { language } = useI18n()
@@ -47,7 +56,7 @@ export default function Chat() {
   const [activeSessionID, setActiveSessionID] = useState(() => localStorage.getItem(selectedSessionStoreKey) || "")
   const [modelName, setModelName] = useState(() => localStorage.getItem(modelStoreKey) || "")
   const [endpointMode, setEndpointMode] = useState<ChatEndpoint>(() => readStoredEndpoint())
-  const [apiKey, setAPIKey] = useState("")
+  const [selectedAPIKeyID, setSelectedAPIKeyID] = useState(() => Number(localStorage.getItem(apiKeyStoreKey) || 0))
   const [prompt, setPrompt] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [editingMessageID, setEditingMessageID] = useState("")
@@ -61,7 +70,20 @@ export default function Chat() {
     },
   })
 
+  const { data: apiKeys = [] } = useQuery<APIKey[]>({
+    queryKey: ["api-keys", "chat"],
+    queryFn: async () => {
+      const res = await api.get("/user/api-keys")
+      return Array.isArray(res.data) ? res.data.map(normalizeAPIKey) : []
+    },
+  })
+
   const modelOptions = useMemo(() => uniqueModels(catalog), [catalog])
+  const selectableAPIKeys = useMemo(() => apiKeys.filter((key) => key.enabled && key.api_key), [apiKeys])
+  const selectedAPIKey = useMemo(
+    () => selectableAPIKeys.find((key) => key.id === selectedAPIKeyID) || selectableAPIKeys[0],
+    [selectableAPIKeys, selectedAPIKeyID]
+  )
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionID) || sessions[0],
     [sessions, activeSessionID]
@@ -96,6 +118,22 @@ export default function Chat() {
   useEffect(() => {
     localStorage.setItem(endpointStoreKey, endpointMode)
   }, [endpointMode])
+
+  useEffect(() => {
+    if (!selectedAPIKey && selectedAPIKeyID !== 0) {
+      setSelectedAPIKeyID(0)
+      return
+    }
+    if (!selectedAPIKeyID && selectedAPIKey) {
+      setSelectedAPIKeyID(selectedAPIKey.id)
+    }
+  }, [selectedAPIKey, selectedAPIKeyID])
+
+  useEffect(() => {
+    if (selectedAPIKeyID) {
+      localStorage.setItem(apiKeyStoreKey, String(selectedAPIKeyID))
+    }
+  }, [selectedAPIKeyID])
 
   useEffect(() => {
     if (!modelName && modelOptions.length > 0) {
@@ -134,7 +172,7 @@ export default function Chat() {
 
   const sendMessage = async () => {
     const content = prompt.trim()
-    const rawKey = apiKey.trim()
+    const rawKey = selectedAPIKey?.api_key.trim() || ""
     const session = activeSession
     if (!session) {
       return
@@ -274,14 +312,18 @@ export default function Chat() {
               <CardTitle>{copy.config}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_220px_minmax(0,1fr)]">
-              <Input
-                value={apiKey}
-                type="password"
-                placeholder={copy.keyPlaceholder}
-                onChange={(event) => {
-                  setAPIKey(event.target.value)
-                }}
-              />
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={selectedAPIKey?.id || ""}
+                onChange={(event) => setSelectedAPIKeyID(Number(event.target.value) || 0)}
+              >
+                <option value="">{selectableAPIKeys.length ? copy.selectKey : copy.noKeys}</option>
+                {selectableAPIKeys.map((key) => (
+                  <option key={key.id} value={key.id}>
+                    {key.name || key.key_prefix}
+                  </option>
+                ))}
+              </select>
               <select
                 className="h-10 rounded-md border bg-background px-3 text-sm"
                 value={endpointMode}
@@ -614,6 +656,20 @@ function normalizeCatalogItem(value: unknown): UserChannelCatalog {
   }
 }
 
+function normalizeAPIKey(value: unknown): APIKey {
+  const item = isRecord(value) ? value : {}
+  return {
+    id: Number(item.id || 0),
+    name: typeof item.name === "string" ? item.name : "",
+    api_key: typeof item.api_key === "string" ? item.api_key : "",
+    key_prefix: typeof item.key_prefix === "string" ? item.key_prefix : "",
+    allowed_models: Array.isArray(item.allowed_models)
+      ? item.allowed_models.filter((model): model is string => typeof model === "string")
+      : [],
+    enabled: Boolean(item.enabled),
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
 }
@@ -630,7 +686,8 @@ const zhCopy = {
   responsesAPI: "Responses",
   claudeMessages: "Claude Messages",
   geminiGenerate: "Gemini GenerateContent",
-  keyPlaceholder: "填写 sk- 令牌",
+  selectKey: "选择令牌",
+  noKeys: "没有可用令牌",
   selectModel: "选择模型",
   conversation: "对话",
   noMessages: "暂无对话",
@@ -641,7 +698,7 @@ const zhCopy = {
   deleteMessage: "删除消息",
   saveMessage: "保存消息",
   cancelEdit: "取消编辑",
-  keyRequired: "请填写令牌",
+  keyRequired: "请选择令牌",
   modelRequired: "请选择模型",
   sendFailed: "发送失败",
   emptyResponse: "空响应",
@@ -659,7 +716,8 @@ const enCopy: typeof zhCopy = {
   responsesAPI: "Responses",
   claudeMessages: "Claude Messages",
   geminiGenerate: "Gemini GenerateContent",
-  keyPlaceholder: "Enter sk- token",
+  selectKey: "Select token",
+  noKeys: "No available tokens",
   selectModel: "Select model",
   conversation: "Conversation",
   noMessages: "No messages",
@@ -670,7 +728,7 @@ const enCopy: typeof zhCopy = {
   deleteMessage: "Delete message",
   saveMessage: "Save message",
   cancelEdit: "Cancel edit",
-  keyRequired: "Enter a token first",
+  keyRequired: "Select a token first",
   modelRequired: "Select a model",
   sendFailed: "Send failed",
   emptyResponse: "Empty response",
