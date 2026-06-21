@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 
 interface UserChannelCatalog {
@@ -41,13 +42,13 @@ const endpointStoreKey = "windypear.chat.endpoint.v1"
 export default function Chat() {
   const { language } = useI18n()
   const copy = language === "zh" ? zhCopy : enCopy
+  const { error } = useToast()
   const [sessions, setSessions] = useState<ChatSession[]>(() => readStoredSessions())
   const [activeSessionID, setActiveSessionID] = useState(() => localStorage.getItem(selectedSessionStoreKey) || "")
   const [modelName, setModelName] = useState(() => localStorage.getItem(modelStoreKey) || "")
   const [endpointMode, setEndpointMode] = useState<ChatEndpoint>(() => readStoredEndpoint())
   const [apiKey, setAPIKey] = useState("")
   const [prompt, setPrompt] = useState("")
-  const [status, setStatus] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [editingMessageID, setEditingMessageID] = useState("")
   const [editingContent, setEditingContent] = useState("")
@@ -107,7 +108,6 @@ export default function Chat() {
     setSessions((current) => [session, ...current])
     setActiveSessionID(session.id)
     setPrompt("")
-    setStatus("")
     cancelEdit()
   }
 
@@ -118,7 +118,6 @@ export default function Chat() {
     if (activeSessionID === sessionID || !fallbackSessions.some((session) => session.id === activeSessionID)) {
       setActiveSessionID(fallbackSessions[0].id)
     }
-    setStatus("")
     cancelEdit()
   }
 
@@ -141,11 +140,11 @@ export default function Chat() {
       return
     }
     if (!rawKey) {
-      setStatus(copy.keyRequired)
+      error(copy.keyRequired)
       return
     }
     if (!modelName.trim()) {
-      setStatus(copy.modelRequired)
+      error(copy.modelRequired)
       return
     }
     if (!content) {
@@ -158,7 +157,6 @@ export default function Chat() {
     updateSession(session.id, (current) => ({ ...current, title: nextTitle, messages: nextMessages }))
     setPrompt("")
     setIsSending(true)
-    setStatus("")
     cancelEdit()
 
     try {
@@ -181,8 +179,8 @@ export default function Chat() {
       const answer = responseTextFromPayload(payload)
       const assistantMessage = createMessage("assistant", answer || copy.emptyResponse)
       updateSession(session.id, (current) => ({ ...current, messages: [...current.messages, assistantMessage] }))
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : copy.sendFailed)
+    } catch (err) {
+      error(err instanceof Error ? err.message : copy.sendFailed)
     } finally {
       setIsSending(false)
     }
@@ -254,7 +252,6 @@ export default function Chat() {
                   className="min-w-0 text-left"
                   onClick={() => {
                     setActiveSessionID(session.id)
-                    setStatus("")
                     cancelEdit()
                   }}
                 >
@@ -283,7 +280,6 @@ export default function Chat() {
                 placeholder={copy.keyPlaceholder}
                 onChange={(event) => {
                   setAPIKey(event.target.value)
-                  setStatus("")
                 }}
               />
               <select
@@ -386,7 +382,6 @@ export default function Chat() {
                   {isSending ? copy.sending : copy.send}
                 </Button>
               </div>
-              {status && <div className="text-sm text-muted-foreground">{status}</div>}
             </CardContent>
           </Card>
         </div>

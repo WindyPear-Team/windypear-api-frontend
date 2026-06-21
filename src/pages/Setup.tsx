@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { useToast } from "@/components/ui/toast"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
@@ -15,6 +16,7 @@ interface SetupResponse {
 export default function Setup() {
   const { language } = useI18n()
   const copy = language === "zh" ? zhCopy : enCopy
+  const { error } = useToast()
   const { data: settings } = useQuery<PublicSettings>({
     queryKey: ["public-settings"],
     queryFn: async () => {
@@ -28,7 +30,6 @@ export default function Setup() {
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [status, setStatus] = useState("")
 
   useEffect(() => {
     if (siteNameEdited) {
@@ -63,7 +64,7 @@ export default function Setup() {
       localStorage.removeItem("referral_code")
       window.location.href = "/dashboard"
     },
-    onError: (error) => setStatus(error instanceof Error ? error.message : copy.failed),
+    onError: (err) => error(err instanceof Error ? err.message : copy.failed),
   })
 
   const canSubmit = Boolean(siteName.trim() && username.trim() && email.trim() && password.length >= 8)
@@ -113,8 +114,6 @@ export default function Setup() {
           <Button className="w-full" disabled={!canSubmit || completeSetup.isPending} onClick={() => completeSetup.mutate()}>
             {completeSetup.isPending ? copy.creating : copy.submit}
           </Button>
-
-          {status && <div className="text-center text-sm text-muted-foreground">{status}</div>}
         </CardContent>
       </Card>
     </div>

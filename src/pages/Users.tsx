@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import { useToast } from "@/components/ui/toast"
 
 interface Group {
   id: number
@@ -56,7 +57,7 @@ export default function Users() {
   const copy = language === "zh" ? zhCopy : enCopy
   const queryClient = useQueryClient()
   const [editingUser, setEditingUser] = useState<UserDraft | null>(null)
-  const [status, setStatus] = useState("")
+  const { success, error } = useToast()
 
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["users"],
@@ -85,29 +86,28 @@ export default function Users() {
     },
     onSuccess: () => {
       setEditingUser(null)
-      setStatus(copy.saved)
+      success(copy.saved)
       queryClient.invalidateQueries({ queryKey: ["users"] })
       queryClient.invalidateQueries({ queryKey: ["me"] })
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
     },
-    onError: () => setStatus(copy.saveFailed),
+    onError: () => error(copy.saveFailed),
   })
 
   const deleteUser = useMutation({
     mutationFn: async (id: number) => api.delete(`/users/${id}`),
     onSuccess: () => {
-      setStatus(copy.deleted)
+      success(copy.deleted)
       queryClient.invalidateQueries({ queryKey: ["users"] })
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
     },
-    onError: () => setStatus(copy.deleteFailed),
+    onError: () => error(copy.deleteFailed),
   })
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">{t("users.title")}</h1>
-        {status && <p className="mt-2 text-sm text-muted-foreground">{status}</p>}
       </div>
 
       <div className="border rounded-md">

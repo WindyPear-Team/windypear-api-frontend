@@ -5,6 +5,7 @@ import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { useToast } from "@/components/ui/toast"
 import { useI18n } from "@/lib/i18n"
 
 interface UserChannelCatalog {
@@ -32,6 +33,7 @@ const responseFormats: ImageResponseFormat[] = ["auto", "url", "b64_json"]
 export default function Images() {
   const { language } = useI18n()
   const copy = language === "zh" ? zhCopy : enCopy
+  const { success, error, info } = useToast()
   const [apiKey, setAPIKey] = useState("")
   const [modelName, setModelName] = useState(() => localStorage.getItem(modelStoreKey) || "")
   const [prompt, setPrompt] = useState("")
@@ -39,7 +41,6 @@ export default function Images() {
   const [count, setCount] = useState(() => normalizeCount(localStorage.getItem(countStoreKey) || "1"))
   const [responseFormat, setResponseFormat] = useState<ImageResponseFormat>(() => normalizeResponseFormat(localStorage.getItem(responseFormatStoreKey) || "auto"))
   const [results, setResults] = useState<ImageResult[]>([])
-  const [status, setStatus] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
 
   const { data: catalog = [] } = useQuery<UserChannelCatalog[]>({
@@ -81,20 +82,19 @@ export default function Images() {
     const cleanPrompt = prompt.trim()
     const cleanModel = modelName.trim()
     if (!rawKey) {
-      setStatus(copy.keyRequired)
+      error(copy.keyRequired)
       return
     }
     if (!cleanModel) {
-      setStatus(copy.modelRequired)
+      error(copy.modelRequired)
       return
     }
     if (!cleanPrompt) {
-      setStatus(copy.promptRequired)
+      error(copy.promptRequired)
       return
     }
 
     setIsGenerating(true)
-    setStatus("")
     try {
       const body: Record<string, string | number> = {
         model: cleanModel,
@@ -123,9 +123,13 @@ export default function Images() {
       }
       const nextResults = imageResultsFromPayload(payload)
       setResults(nextResults)
-      setStatus(nextResults.length > 0 ? copy.generated.replace("{count}", String(nextResults.length)) : copy.emptyResponse)
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : copy.generateFailed)
+      if (nextResults.length > 0) {
+        success(copy.generated.replace("{count}", String(nextResults.length)))
+      } else {
+        info(copy.emptyResponse)
+      }
+    } catch (err) {
+      error(err instanceof Error ? err.message : copy.generateFailed)
     } finally {
       setIsGenerating(false)
     }
@@ -155,7 +159,6 @@ export default function Images() {
                 placeholder={copy.keyPlaceholder}
                 onChange={(event) => {
                   setAPIKey(event.target.value)
-                  setStatus("")
                 }}
               />
             </label>
@@ -215,7 +218,6 @@ export default function Images() {
                 placeholder={copy.promptPlaceholder}
                 onChange={(event) => {
                   setPrompt(event.target.value)
-                  setStatus("")
                 }}
               />
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -223,7 +225,6 @@ export default function Images() {
                   <WandSparkles size={16} />
                   {isGenerating ? copy.generating : copy.generate}
                 </Button>
-                {status && <div className="text-sm text-muted-foreground">{status}</div>}
               </div>
             </CardContent>
           </Card>

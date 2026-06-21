@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { useToast } from "@/components/ui/toast"
 import {
   Table,
   TableBody,
@@ -120,7 +121,7 @@ export default function Models() {
   const copy = language === "zh" ? zhCopy : enCopy
   const queryClient = useQueryClient()
   const [editingModel, setEditingModel] = useState<Partial<ModelConfig> | null>(null)
-  const [status, setStatus] = useState("")
+  const { success, error, info } = useToast()
   const [priceChannelID, setPriceChannelID] = useState(0)
   const [syncFormat, setSyncFormat] = useState("auto")
   const [customSyncPath, setCustomSyncPath] = useState("")
@@ -161,20 +162,20 @@ export default function Models() {
       return res.data
     },
     onSuccess: () => {
-      setStatus(t("admin.saved"))
+      success(t("admin.saved"))
       setEditingModel(null)
       invalidate()
     },
-    onError: (error) => setStatus(error instanceof Error ? error.message : t("admin.saveFailed")),
+    onError: (err) => error(err instanceof Error ? err.message : t("admin.saveFailed")),
   })
 
   const deleteModel = useMutation({
     mutationFn: async (id: number) => api.delete(`/models/${id}`),
     onSuccess: () => {
-      setStatus(t("admin.deleted"))
+      success(t("admin.deleted"))
       invalidate()
     },
-    onError: () => setStatus(t("admin.deleteFailed")),
+    onError: () => error(t("admin.deleteFailed")),
   })
 
   const previewPriceSync = useMutation({
@@ -192,12 +193,11 @@ export default function Models() {
     onSuccess: (preview) => {
       setSyncPreview(preview)
       setSelectedModelNames(preview.models.map((item) => item.model_name))
-      setStatus("")
     },
-    onError: (error) => {
-      console.error("Model price sync preview failed", error)
-      setStatus(syncErrorMessage(error, copy.syncPreviewFailed))
-      openBrowserFallback(error)
+    onError: (err) => {
+      console.error("Model price sync preview failed", err)
+      error(syncErrorMessage(err, copy.syncPreviewFailed))
+      openBrowserFallback(err)
     },
   })
 
@@ -214,11 +214,10 @@ export default function Models() {
       setSyncPreview(preview)
       setSelectedModelNames(preview.models.map((item) => item.model_name))
       setBrowserFallback(null)
-      setStatus("")
     },
-    onError: (error) => {
-      console.error("Browser model price sync preview failed", error)
-      setStatus(syncErrorMessage(error, copy.browserPreviewFailed))
+    onError: (err) => {
+      console.error("Browser model price sync preview failed", err)
+      error(syncErrorMessage(err, copy.browserPreviewFailed))
     },
   })
 
@@ -235,25 +234,25 @@ export default function Models() {
       return Array.isArray(res.data?.results) ? res.data.results as SyncResult[] : []
     },
     onSuccess: (results) => {
-      setStatus(syncSummary(results, copy))
+      success(syncSummary(results, copy))
       setSyncPreview(null)
       setSelectedModelNames([])
       invalidate()
     },
-    onError: (error) => {
-      console.error("Model price sync apply failed", error)
-      setStatus(syncErrorMessage(error, copy.syncFailed))
+    onError: (err) => {
+      console.error("Model price sync apply failed", err)
+      error(syncErrorMessage(err, copy.syncFailed))
     },
   })
 
-  const openBrowserFallback = (error: unknown) => {
+  const openBrowserFallback = (sourceError: unknown) => {
     const channel = channels.find((item) => item.id === priceChannelID)
     if (!channel) {
       return
     }
-    const nextFallback = browserFallbackForChannel(channel, syncFormat, customSyncPath, syncErrorMessage(error, copy.syncPreviewFailed))
+    const nextFallback = browserFallbackForChannel(channel, syncFormat, customSyncPath, syncErrorMessage(sourceError, copy.syncPreviewFailed))
     if (!nextFallback.url) {
-      setStatus(copy.missingBaseURL)
+      error(copy.missingBaseURL)
       return
     }
     setBrowserFallback(nextFallback)
@@ -264,7 +263,7 @@ export default function Models() {
       return
     }
     try {
-      setStatus(copy.browserFetching)
+      info(copy.browserFetching)
       const headers: HeadersInit = { Accept: "application/json, text/plain, */*" }
       if (browserFallback.includeToken && browserFallback.channel.api_key) {
         headers.Authorization = `Bearer ${browserFallback.channel.api_key}`
@@ -280,9 +279,9 @@ export default function Models() {
       }
       const payload = JSON.parse(text)
       browserPreviewSync.mutate({ fallback: browserFallback, payload })
-    } catch (error) {
-      console.error("Browser model price sync fetch failed", error)
-      setStatus(error instanceof Error ? `${copy.browserFetchFailed}: ${error.message}` : copy.browserFetchFailed)
+    } catch (err) {
+      console.error("Browser model price sync fetch failed", err)
+      error(err instanceof Error ? `${copy.browserFetchFailed}: ${err.message}` : copy.browserFetchFailed)
     }
   }
 
@@ -293,9 +292,9 @@ export default function Models() {
     try {
       const payload = JSON.parse(browserFallback.manualPayload)
       browserPreviewSync.mutate({ fallback: browserFallback, payload })
-    } catch (error) {
-      console.error("Manual model price sync payload parse failed", error)
-      setStatus(copy.manualPayloadInvalid)
+    } catch (err) {
+      console.error("Manual model price sync payload parse failed", err)
+      error(copy.manualPayloadInvalid)
     }
   }
 
@@ -306,7 +305,6 @@ export default function Models() {
           <h1 className="text-3xl font-bold">{t("models.title")}</h1>
           <div className="mt-2 text-sm text-muted-foreground">{copy.subtitle}</div>
         </div>
-        <div className="text-sm text-muted-foreground">{status}</div>
       </div>
 
       <Card>

@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { useToast } from "@/components/ui/toast"
 
 interface UserChannelCatalog {
   id: number
@@ -62,7 +63,7 @@ interface APIKeyPayload {
 export default function APIKeys() {
   const queryClient = useQueryClient()
   const { t } = useI18n()
-  const [status, setStatus] = useState("")
+  const { success, error } = useToast()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newRawKey, setNewRawKey] = useState("")
   const [newName, setNewName] = useState("")
@@ -101,7 +102,7 @@ export default function APIKeys() {
     },
     onSuccess: (data) => {
       setNewRawKey(data.api_key)
-      setStatus(t("settings.keyCreated"))
+      success(t("settings.keyCreated"))
       setNewName("")
       setNewChannelId(0)
       setNewModels([])
@@ -109,7 +110,7 @@ export default function APIKeys() {
       setNewQuotaLimit("")
       queryClient.invalidateQueries({ queryKey: ["api-keys"] })
     },
-    onError: () => setStatus(t("settings.keyCreateFailed")),
+    onError: () => error(t("settings.keyCreateFailed")),
   })
 
   const updateAPIKey = useMutation({
@@ -118,10 +119,10 @@ export default function APIKeys() {
       return res.data
     },
     onSuccess: () => {
-      setStatus(t("settings.keyUpdated"))
+      success(t("settings.keyUpdated"))
       queryClient.invalidateQueries({ queryKey: ["api-keys"] })
     },
-    onError: () => setStatus(t("settings.keyUpdateFailed")),
+    onError: () => error(t("settings.keyUpdateFailed")),
   })
 
   const deleteAPIKey = useMutation({
@@ -129,10 +130,10 @@ export default function APIKeys() {
       await api.delete(`/user/api-keys/${id}`)
     },
     onSuccess: () => {
-      setStatus(t("settings.keyDeleted"))
+      success(t("settings.keyDeleted"))
       queryClient.invalidateQueries({ queryKey: ["api-keys"] })
     },
-    onError: () => setStatus(t("settings.keyDeleteFailed")),
+    onError: () => error(t("settings.keyDeleteFailed")),
   })
 
   const copyValue = async (value: string) => {
@@ -140,12 +141,11 @@ export default function APIKeys() {
       return
     }
     await navigator.clipboard.writeText(value)
-    setStatus(t("settings.keyCopied"))
+    success(t("settings.keyCopied"))
   }
 
   const openCreateDialog = () => {
     setNewRawKey("")
-    setStatus("")
     setIsCreateOpen(true)
   }
 
@@ -190,7 +190,6 @@ export default function APIKeys() {
               />
             ))
           )}
-          {status && <div className="text-sm text-muted-foreground">{status}</div>}
         </CardContent>
       </Card>
 
@@ -242,8 +241,6 @@ export default function APIKeys() {
               </div>
             </div>
           )}
-
-          {status && <div className="text-sm text-muted-foreground">{status}</div>}
 
           <DialogFooter>
             <Button variant="outline" onClick={closeCreateDialog}>

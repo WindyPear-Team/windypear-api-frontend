@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 
 interface UserChannel {
@@ -136,7 +137,7 @@ export default function Channels() {
   const { language, t } = useI18n()
   const copy = language === "zh" ? zhChannelCopy : enChannelCopy
   const queryClient = useQueryClient()
-  const [status, setStatus] = useState("")
+  const { success, error } = useToast()
   const [editingUserChannel, setEditingUserChannel] = useState<Partial<UserChannel> | null>(null)
   const [editingUpstream, setEditingUpstream] = useState<Partial<UpstreamChannel> | null>(null)
   const [editingMultipliers, setEditingMultipliers] = useState<UpstreamChannel | null>(null)
@@ -185,24 +186,24 @@ export default function Channels() {
       return res.data
     },
     onSuccess: () => {
-      setStatus(t("admin.saved"))
+      success(t("admin.saved"))
       setEditingUserChannel(null)
       queryClient.invalidateQueries({ queryKey: ["admin-user-channels"] })
       queryClient.invalidateQueries({ queryKey: ["admin-channel-usage"] })
       queryClient.invalidateQueries({ queryKey: ["catalog"] })
     },
-    onError: () => setStatus(t("admin.saveFailed")),
+    onError: () => error(t("admin.saveFailed")),
   })
 
   const deleteUserChannel = useMutation({
     mutationFn: async (id: number) => api.delete(`/user-channels/${id}`),
     onSuccess: () => {
-      setStatus(t("admin.deleted"))
+      success(t("admin.deleted"))
       queryClient.invalidateQueries({ queryKey: ["admin-user-channels"] })
       queryClient.invalidateQueries({ queryKey: ["admin-channel-usage"] })
       queryClient.invalidateQueries({ queryKey: ["catalog"] })
     },
-    onError: () => setStatus(t("admin.deleteFailed")),
+    onError: () => error(t("admin.deleteFailed")),
   })
 
   const saveUpstream = useMutation({
@@ -216,24 +217,24 @@ export default function Channels() {
       return res.data
     },
     onSuccess: () => {
-      setStatus(t("admin.saved"))
+      success(t("admin.saved"))
       setEditingUpstream(null)
       queryClient.invalidateQueries({ queryKey: ["admin-upstream-channels"] })
       queryClient.invalidateQueries({ queryKey: ["admin-channel-usage"] })
       queryClient.invalidateQueries({ queryKey: ["catalog"] })
     },
-    onError: () => setStatus(t("admin.saveFailed")),
+    onError: () => error(t("admin.saveFailed")),
   })
 
   const deleteUpstream = useMutation({
     mutationFn: async (id: number) => api.delete(`/channels/${id}`),
     onSuccess: () => {
-      setStatus(t("admin.deleted"))
+      success(t("admin.deleted"))
       queryClient.invalidateQueries({ queryKey: ["admin-upstream-channels"] })
       queryClient.invalidateQueries({ queryKey: ["admin-channel-usage"] })
       queryClient.invalidateQueries({ queryKey: ["catalog"] })
     },
-    onError: () => setStatus(t("admin.deleteFailed")),
+    onError: () => error(t("admin.deleteFailed")),
   })
 
   const toggleUpstream = useMutation({
@@ -242,12 +243,12 @@ export default function Channels() {
       return res.data
     },
     onSuccess: () => {
-      setStatus(t("admin.saved"))
+      success(t("admin.saved"))
       queryClient.invalidateQueries({ queryKey: ["admin-upstream-channels"] })
       queryClient.invalidateQueries({ queryKey: ["admin-channel-usage"] })
       queryClient.invalidateQueries({ queryKey: ["catalog"] })
     },
-    onError: () => setStatus(t("admin.saveFailed")),
+    onError: () => error(t("admin.saveFailed")),
   })
 
   const saveGroupMultipliers = useMutation({
@@ -259,11 +260,11 @@ export default function Channels() {
       return res.data
     },
     onSuccess: () => {
-      setStatus(copy.groupMultipliersSaved)
+      success(copy.groupMultipliersSaved)
       setEditingMultipliers(null)
       queryClient.invalidateQueries({ queryKey: ["admin-upstream-channels"] })
     },
-    onError: () => setStatus(copy.groupMultipliersSaveFailed),
+    onError: () => error(copy.groupMultipliersSaveFailed),
   })
 
   return (
@@ -273,7 +274,6 @@ export default function Channels() {
           <h1 className="text-3xl font-bold">{t("channels.title")}</h1>
           <div className="mt-2 text-sm text-muted-foreground">{t("admin.channelsSubtitle")}</div>
         </div>
-        <div className="text-sm text-muted-foreground">{status}</div>
       </div>
 
       <Card>
@@ -430,7 +430,6 @@ export default function Channels() {
         channel={modelChannel}
         groups={groups}
         onClose={() => setModelChannel(null)}
-        onStatus={setStatus}
       />
       <GroupMultiplierDialog
         title={copy.groupMultipliers}
@@ -609,15 +608,14 @@ function UpstreamModelConfigDialog({
   channel,
   groups,
   onClose,
-  onStatus,
 }: {
   channel: UpstreamChannel | null
   groups: Group[]
   onClose: () => void
-  onStatus: (status: string) => void
 }) {
   const { language, t } = useI18n()
   const copy = language === "zh" ? zhChannelCopy : enChannelCopy
+  const { success, error, info } = useToast()
   const queryClient = useQueryClient()
   const [editingModel, setEditingModel] = useState<Partial<ChannelModelConfig> | null>(null)
   const [editingModelMultipliers, setEditingModelMultipliers] = useState<ChannelModelConfig | null>(null)
@@ -657,20 +655,20 @@ function UpstreamModelConfigDialog({
       return res.data
     },
     onSuccess: () => {
-      onStatus(t("admin.saved"))
+      success(t("admin.saved"))
       setEditingModel(null)
       invalidate()
     },
-    onError: (error) => onStatus(error instanceof Error ? error.message : t("admin.saveFailed")),
+    onError: (err) => error(err instanceof Error ? err.message : t("admin.saveFailed")),
   })
 
   const deleteModel = useMutation({
     mutationFn: async (id: number) => api.delete(`/channel-models/${id}`),
     onSuccess: () => {
-      onStatus(t("admin.deleted"))
+      success(t("admin.deleted"))
       invalidate()
     },
-    onError: () => onStatus(t("admin.deleteFailed")),
+    onError: () => error(t("admin.deleteFailed")),
   })
 
   const saveModelMultipliers = useMutation({
@@ -682,11 +680,11 @@ function UpstreamModelConfigDialog({
       return res.data
     },
     onSuccess: () => {
-      onStatus(copy.groupMultipliersSaved)
+      success(copy.groupMultipliersSaved)
       setEditingModelMultipliers(null)
       invalidate()
     },
-    onError: () => onStatus(copy.groupMultipliersSaveFailed),
+    onError: () => error(copy.groupMultipliersSaveFailed),
   })
 
   const previewSync = useMutation({
@@ -704,13 +702,12 @@ function UpstreamModelConfigDialog({
     onSuccess: (preview) => {
       setSyncPreview(preview)
       setSelectedModelNames(preview.models.map((item) => item.model_name))
-      onStatus("")
     },
-    onError: (error) => {
-      console.error("Model sync preview failed", error)
-      onStatus(syncErrorMessage(error, copy.syncPreviewFailed))
+    onError: (err) => {
+      console.error("Model sync preview failed", err)
+      error(syncErrorMessage(err, copy.syncPreviewFailed))
       if (channel) {
-        openBrowserFallback(channel, error)
+        openBrowserFallback(channel, err)
       }
     },
   })
@@ -728,11 +725,10 @@ function UpstreamModelConfigDialog({
       setSyncPreview(preview)
       setSelectedModelNames(preview.models.map((item) => item.model_name))
       setBrowserFallback(null)
-      onStatus("")
     },
-    onError: (error) => {
-      console.error("Browser model sync preview failed", error)
-      onStatus(syncErrorMessage(error, copy.browserPreviewFailed))
+    onError: (err) => {
+      console.error("Browser model sync preview failed", err)
+      error(syncErrorMessage(err, copy.browserPreviewFailed))
     },
   })
 
@@ -749,21 +745,21 @@ function UpstreamModelConfigDialog({
       return Array.isArray(res.data?.results) ? res.data.results as SyncResult[] : []
     },
     onSuccess: (results) => {
-      onStatus(syncSummary(results, t))
+      success(syncSummary(results, t))
       setSyncPreview(null)
       setSelectedModelNames([])
       invalidate()
     },
-    onError: (error) => {
-      console.error("Model sync apply failed", error)
-      onStatus(syncErrorMessage(error, copy.syncFailed))
+    onError: (err) => {
+      console.error("Model sync apply failed", err)
+      error(syncErrorMessage(err, copy.syncFailed))
     },
   })
 
-  const openBrowserFallback = (targetChannel: UpstreamChannel, error: unknown) => {
-    const nextFallback = browserFallbackForChannel(targetChannel, syncFormat, customSyncPath, syncErrorMessage(error, copy.syncPreviewFailed))
+  const openBrowserFallback = (targetChannel: UpstreamChannel, err: unknown) => {
+    const nextFallback = browserFallbackForChannel(targetChannel, syncFormat, customSyncPath, syncErrorMessage(err, copy.syncPreviewFailed))
     if (!nextFallback.url) {
-      onStatus(copy.missingBaseURL)
+      error(copy.missingBaseURL)
       return
     }
     setBrowserFallback(nextFallback)
@@ -774,7 +770,7 @@ function UpstreamModelConfigDialog({
       return
     }
     try {
-      onStatus(copy.browserFetching)
+      info(copy.browserFetching)
       const headers: HeadersInit = { Accept: "application/json, text/plain, */*" }
       if (browserFallback.includeToken && browserFallback.channel.api_key) {
         headers.Authorization = `Bearer ${browserFallback.channel.api_key}`
@@ -790,9 +786,9 @@ function UpstreamModelConfigDialog({
       }
       const payload = JSON.parse(text)
       browserPreviewSync.mutate({ fallback: browserFallback, payload })
-    } catch (error) {
-      console.error("Browser model sync fetch failed", error)
-      onStatus(error instanceof Error ? `${copy.browserFetchFailed}: ${error.message}` : copy.browserFetchFailed)
+    } catch (err) {
+      console.error("Browser model sync fetch failed", err)
+      error(err instanceof Error ? `${copy.browserFetchFailed}: ${err.message}` : copy.browserFetchFailed)
     }
   }
 
@@ -803,9 +799,9 @@ function UpstreamModelConfigDialog({
     try {
       const payload = JSON.parse(browserFallback.manualPayload)
       browserPreviewSync.mutate({ fallback: browserFallback, payload })
-    } catch (error) {
-      console.error("Manual model sync payload parse failed", error)
-      onStatus(copy.manualPayloadInvalid)
+    } catch (err) {
+      console.error("Manual model sync payload parse failed", err)
+      error(copy.manualPayloadInvalid)
     }
   }
 

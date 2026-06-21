@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { useToast } from "@/components/ui/toast"
 import api, { getAuthLoginURL } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
@@ -14,6 +15,7 @@ type Mode = "login" | "register"
 
 export default function Login() {
   const { language, t } = useI18n()
+  const { success, error } = useToast()
   const copy = language === "zh" ? zhCopy : enCopy
   const { data: settings } = useQuery<PublicSettings>({
     queryKey: ["public-settings"],
@@ -31,7 +33,6 @@ export default function Login() {
   const [password, setPassword] = useState("")
   const [emailCode, setEmailCode] = useState("")
   const [captchaToken, setCaptchaToken] = useState("")
-  const [status, setStatus] = useState("")
   const labels = language === "zh"
     ? { about: "关于", privacy: "隐私政策", terms: "用户协议" }
     : { about: "About", privacy: "Privacy", terms: "Terms" }
@@ -81,7 +82,7 @@ export default function Login() {
       localStorage.removeItem("referral_code")
       window.location.href = "/dashboard"
     },
-    onError: (error) => setStatus(error instanceof Error ? error.message : copy.authFailed),
+    onError: (err) => error(err instanceof Error ? err.message : copy.authFailed),
   })
 
   const signInWithPasskey = useMutation({
@@ -121,7 +122,7 @@ export default function Login() {
       localStorage.removeItem("referral_code")
       window.location.href = "/dashboard"
     },
-    onError: (error) => setStatus(error instanceof Error ? error.message : copy.passkeyFailed),
+    onError: (err) => error(err instanceof Error ? err.message : copy.passkeyFailed),
   })
 
   const sendCode = useMutation({
@@ -137,8 +138,8 @@ export default function Login() {
       }
       return body
     },
-    onSuccess: () => setStatus(copy.codeSent),
-    onError: (error) => setStatus(error instanceof Error ? error.message : copy.sendCodeFailed),
+    onSuccess: () => success(copy.codeSent),
+    onError: (err) => error(err instanceof Error ? err.message : copy.sendCodeFailed),
   })
 
   const handleOIDCLogin = () => {
@@ -233,7 +234,6 @@ export default function Login() {
             </>
           )}
 
-          {status && <div className="text-center text-sm text-muted-foreground">{status}</div>}
           {(publicSettings.about_html || publicSettings.privacy_policy || publicSettings.terms) && (
             <div className="flex flex-wrap justify-center gap-3 text-xs text-muted-foreground">
               {publicSettings.about_html && <Link to="/about">{labels.about}</Link>}

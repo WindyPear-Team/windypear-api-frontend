@@ -24,6 +24,7 @@ import PublicContent from "./pages/PublicContent"
 import StatusPage from "./pages/StatusPage"
 import api from "./lib/api"
 import { I18nProvider, useI18n } from "./lib/i18n"
+import { ToastProvider } from "./components/ui/toast"
 import type { TranslationKey } from "./lib/i18n"
 import type { PublicSettings } from "./lib/public-settings"
 import { withPublicSettingsDefaults } from "./lib/public-settings"
@@ -239,9 +240,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
-        <BrowserRouter>
-          <DocumentTitle />
-          <SetupGate>
+        <ToastProvider>
+          <BrowserRouter>
+            <DocumentTitle />
+            <SetupGate>
             <Routes>
               <Route path="/" element={<PageTransition><Home /></PageTransition>} />
               <Route path="/setup" element={<PageTransition><Setup /></PageTransition>} />
@@ -352,7 +354,8 @@ function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </SetupGate>
-        </BrowserRouter>
+          </BrowserRouter>
+        </ToastProvider>
       </I18nProvider>
     </QueryClientProvider>
   )

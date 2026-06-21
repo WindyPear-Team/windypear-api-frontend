@@ -28,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { TabTransition } from "@/components/layout/TabTransition"
+import { useToast } from "@/components/ui/toast"
 import {
   Dialog,
   DialogContent,
@@ -381,7 +382,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   const [announcementDraft, setAnnouncementDraft] = useState<AnnouncementDraft>(defaultAnnouncementDraft)
   const [isAnnouncementDialogOpen, setIsAnnouncementDialogOpen] = useState(false)
   const [isPremiumNoticeOpen, setIsPremiumNoticeOpen] = useState(false)
-  const [status, setStatus] = useState("")
+  const { success, error } = useToast()
 
   const { data: settings } = useQuery<SystemSettings>({
     queryKey: ["system-settings"],
@@ -476,11 +477,11 @@ export default function SystemManagement({ section = "general", initialTab }: { 
     onSuccess: (savedSettings: SystemSettings) => {
       setForm({ ...defaultSystemSettings, ...savedSettings })
       setNavRows(parseTopNavRows(savedSettings.top_nav_items || ""))
-      setStatus(t("system.settingsSaved"))
+      success(t("system.settingsSaved"))
       queryClient.invalidateQueries({ queryKey: ["system-settings"] })
       queryClient.invalidateQueries({ queryKey: ["public-settings"] })
     },
-    onError: () => setStatus(t("system.settingsSaveFailed")),
+    onError: () => error(t("system.settingsSaveFailed")),
   })
 
   const saveGroup = useMutation({
@@ -496,19 +497,19 @@ export default function SystemManagement({ section = "general", initialTab }: { 
     onSuccess: () => {
       setGroupDraft(defaultGroupDraft)
       setIsGroupDialogOpen(false)
-      setStatus(copy.groupSaved)
+      success(copy.groupSaved)
       queryClient.invalidateQueries({ queryKey: ["groups"] })
     },
-    onError: () => setStatus(copy.groupSaveFailed),
+    onError: () => error(copy.groupSaveFailed),
   })
 
   const deleteGroup = useMutation({
     mutationFn: async (id: number) => api.delete(`/groups/${id}`),
     onSuccess: () => {
-      setStatus(copy.groupDeleted)
+      success(copy.groupDeleted)
       queryClient.invalidateQueries({ queryKey: ["groups"] })
     },
-    onError: () => setStatus(copy.groupDeleteFailed),
+    onError: () => error(copy.groupDeleteFailed),
   })
 
   const saveStatusMonitor = useMutation({
@@ -524,28 +525,28 @@ export default function SystemManagement({ section = "general", initialTab }: { 
     onSuccess: () => {
       setStatusMonitorDraft(defaultStatusMonitorDraft)
       setIsStatusMonitorDialogOpen(false)
-      setStatus(copy.statusMonitorSaved)
+      success(copy.statusMonitorSaved)
       queryClient.invalidateQueries({ queryKey: ["status-monitors"] })
     },
-    onError: () => setStatus(copy.statusMonitorSaveFailed),
+    onError: () => error(copy.statusMonitorSaveFailed),
   })
 
   const deleteStatusMonitor = useMutation({
     mutationFn: async (id: number) => api.delete(`/status-monitors/${id}`),
     onSuccess: () => {
-      setStatus(copy.statusMonitorDeleted)
+      success(copy.statusMonitorDeleted)
       queryClient.invalidateQueries({ queryKey: ["status-monitors"] })
     },
-    onError: () => setStatus(copy.statusMonitorDeleteFailed),
+    onError: () => error(copy.statusMonitorDeleteFailed),
   })
 
   const checkStatusMonitor = useMutation({
     mutationFn: async (id: number) => api.post(`/status-monitors/${id}/check`),
     onSuccess: () => {
-      setStatus(copy.statusMonitorChecked)
+      success(copy.statusMonitorChecked)
       queryClient.invalidateQueries({ queryKey: ["status-monitors"] })
     },
-    onError: () => setStatus(copy.statusMonitorCheckFailed),
+    onError: () => error(copy.statusMonitorCheckFailed),
   })
 
   const saveAnnouncement = useMutation({
@@ -562,21 +563,21 @@ export default function SystemManagement({ section = "general", initialTab }: { 
     onSuccess: () => {
       setAnnouncementDraft(defaultAnnouncementDraft)
       setIsAnnouncementDialogOpen(false)
-      setStatus(copy.announcementSaved)
+      success(copy.announcementSaved)
       queryClient.invalidateQueries({ queryKey: ["announcements"] })
       queryClient.invalidateQueries({ queryKey: ["public-announcements"] })
     },
-    onError: () => setStatus(copy.announcementSaveFailed),
+    onError: () => error(copy.announcementSaveFailed),
   })
 
   const deleteAnnouncement = useMutation({
     mutationFn: async (id: number) => api.delete(`/announcements/${id}`),
     onSuccess: () => {
-      setStatus(copy.announcementDeleted)
+      success(copy.announcementDeleted)
       queryClient.invalidateQueries({ queryKey: ["announcements"] })
       queryClient.invalidateQueries({ queryKey: ["public-announcements"] })
     },
-    onError: () => setStatus(copy.announcementDeleteFailed),
+    onError: () => error(copy.announcementDeleteFailed),
   })
 
   const saveSubscriptionPlan = useMutation({
@@ -592,19 +593,19 @@ export default function SystemManagement({ section = "general", initialTab }: { 
     onSuccess: () => {
       setSubscriptionPlanDraft(defaultSubscriptionPlanDraft)
       setIsSubscriptionPlanDialogOpen(false)
-      setStatus(copy.subscriptionPlanSaved)
+      success(copy.subscriptionPlanSaved)
       queryClient.invalidateQueries({ queryKey: ["subscription-plans"] })
     },
-    onError: () => setStatus(copy.subscriptionPlanSaveFailed),
+    onError: () => error(copy.subscriptionPlanSaveFailed),
   })
 
   const deleteSubscriptionPlan = useMutation({
     mutationFn: async (id: number) => api.delete(`/subscription-plans/${id}`),
     onSuccess: () => {
-      setStatus(copy.subscriptionPlanDeleted)
+      success(copy.subscriptionPlanDeleted)
       queryClient.invalidateQueries({ queryKey: ["subscription-plans"] })
     },
-    onError: () => setStatus(copy.subscriptionPlanDeleteFailed),
+    onError: () => error(copy.subscriptionPlanDeleteFailed),
   })
 
   const saveMetaModel = useMutation({
@@ -620,11 +621,11 @@ export default function SystemManagement({ section = "general", initialTab }: { 
     onSuccess: () => {
       setMetaModelDraft(defaultMetaModelDraft)
       setIsMetaModelDialogOpen(false)
-      setStatus(copy.metaModelSaved)
+      success(copy.metaModelSaved)
       queryClient.invalidateQueries({ queryKey: ["meta-models"] })
       queryClient.invalidateQueries({ queryKey: ["public-models"] })
     },
-    onError: (error) => setStatus(apiErrorMessage(error, copy.metaModelSaveFailed)),
+    onError: (err) => error(apiErrorMessage(err, copy.metaModelSaveFailed)),
   })
 
   const validateMetaModel = useMutation({
@@ -632,18 +633,18 @@ export default function SystemManagement({ section = "general", initialTab }: { 
       const res = await api.post("/meta-models/validate", metaModelPayload(metaModelDraft))
       return res.data
     },
-    onSuccess: () => setStatus(copy.metaModelValid),
-    onError: (error) => setStatus(apiErrorMessage(error, copy.metaModelInvalid)),
+    onSuccess: () => success(copy.metaModelValid),
+    onError: (err) => error(apiErrorMessage(err, copy.metaModelInvalid)),
   })
 
   const deleteMetaModel = useMutation({
     mutationFn: async (id: number) => api.delete(`/meta-models/${id}`),
     onSuccess: () => {
-      setStatus(copy.metaModelDeleted)
+      success(copy.metaModelDeleted)
       queryClient.invalidateQueries({ queryKey: ["meta-models"] })
       queryClient.invalidateQueries({ queryKey: ["public-models"] })
     },
-    onError: () => setStatus(copy.metaModelDeleteFailed),
+    onError: () => error(copy.metaModelDeleteFailed),
   })
 
   const createRedeemCode = useMutation({
@@ -655,10 +656,10 @@ export default function SystemManagement({ section = "general", initialTab }: { 
       setRedeemDraft(defaultRedeemDraft)
       setIsRedeemDialogOpen(false)
       downloadRedeemCodesTxt([createdCode], copy, `redeem-code-${createdCode.code}.txt`)
-      setStatus(copy.redeemCodeCreated)
+      success(copy.redeemCodeCreated)
       queryClient.invalidateQueries({ queryKey: ["redeem-codes"] })
     },
-    onError: () => setStatus(copy.redeemCodeCreateFailed),
+    onError: () => error(copy.redeemCodeCreateFailed),
   })
 
   const updateRedeemCode = useMutation({
@@ -678,19 +679,19 @@ export default function SystemManagement({ section = "general", initialTab }: { 
       return res.data
     },
     onSuccess: () => {
-      setStatus(copy.redeemCodeUpdated)
+      success(copy.redeemCodeUpdated)
       queryClient.invalidateQueries({ queryKey: ["redeem-codes"] })
     },
-    onError: () => setStatus(copy.redeemCodeUpdateFailed),
+    onError: () => error(copy.redeemCodeUpdateFailed),
   })
 
   const deleteRedeemCode = useMutation({
     mutationFn: async (id: number) => api.delete(`/redeem-codes/${id}`),
     onSuccess: () => {
-      setStatus(copy.redeemCodeDeleted)
+      success(copy.redeemCodeDeleted)
       queryClient.invalidateQueries({ queryKey: ["redeem-codes"] })
     },
-    onError: () => setStatus(copy.redeemCodeDeleteFailed),
+    onError: () => error(copy.redeemCodeDeleteFailed),
   })
 
   const updateField = <K extends keyof SystemSettings>(key: K, value: SystemSettings[K]) => {
@@ -741,7 +742,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   const handleSaveSettings = () => {
     const streakRewards = validateCheckInStreakRewards(form.checkin_streak_rewards, copy)
     if (!streakRewards.valid) {
-      setStatus(streakRewards.error)
+      error(streakRewards.error)
       setActiveTab("checkIn")
       return
     }
@@ -754,7 +755,6 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         <div>
           <h1 className="text-3xl font-bold">{t("system.title")}</h1>
           <div className="mt-2 text-sm text-muted-foreground">{copy.systemSubtitle}</div>
-          {status && <div className="mt-2 text-sm text-muted-foreground">{status}</div>}
         </div>
         {shouldShowSave && (
           <Button onClick={handleSaveSettings} disabled={saveSettings.isPending}>

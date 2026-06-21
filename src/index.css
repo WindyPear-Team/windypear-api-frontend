@@ -121,10 +121,42 @@
     animation: tab-in-left 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateX(16px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+    }
+  }
+
+  @keyframes toast-out {
+    from {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(16px) scale(0.98);
+    }
+  }
+
+  .animate-toast-in {
+    animation: toast-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-toast-out {
+    animation: toast-out 0.18s ease-in both;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .animate-page-in,
     .animate-tab-in-right,
-    .animate-tab-in-left {
+    .animate-tab-in-left,
+    .animate-toast-in,
+    .animate-toast-out {
       animation: none;
     }
   }
