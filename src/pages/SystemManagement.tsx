@@ -740,6 +740,11 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   const allVisibleRedeemCodesSelected = visibleRedeemCodes.length > 0 && visibleRedeemCodes.every((code) => selectedRedeemCodeIDs.includes(code.id))
 
   const handleSaveSettings = () => {
+    if (!isPremiumEdition && form.chat_page_mode === "advanced") {
+      updateField("chat_page_mode", "basic")
+      setIsPremiumNoticeOpen(true)
+      return
+    }
     const streakRewards = validateCheckInStreakRewards(form.checkin_streak_rewards, copy)
     if (!streakRewards.valid) {
       error(streakRewards.error)
@@ -1124,20 +1129,42 @@ export default function SystemManagement({ section = "general", initialTab }: { 
 
       {activeTab === "navigation" && (
         <SettingsPanel title={copy.navigation}>
-          <div className="grid gap-3 lg:grid-cols-2">
-            <ToggleField label={copy.sidebarDashboard} checked={form.sidebar_dashboard_enabled} onChange={(checked) => updateField("sidebar_dashboard_enabled", checked)} />
-            <ToggleField label={copy.sidebarUsage} checked={form.sidebar_usage_enabled} onChange={(checked) => updateField("sidebar_usage_enabled", checked)} />
-            <ToggleField label={copy.sidebarWallet} checked={form.sidebar_wallet_enabled} onChange={(checked) => updateField("sidebar_wallet_enabled", checked)} />
-            <ToggleField label={copy.sidebarDataBoard} checked={form.sidebar_data_board_enabled} onChange={(checked) => updateField("sidebar_data_board_enabled", checked)} />
-            <ToggleField label={copy.sidebarAPIKeys} checked={form.sidebar_api_keys_enabled} onChange={(checked) => updateField("sidebar_api_keys_enabled", checked)} />
-            <ToggleField label={copy.sidebarChat} checked={form.sidebar_chat_enabled} onChange={(checked) => updateField("sidebar_chat_enabled", checked)} />
-            <ToggleField label={copy.sidebarImages} checked={form.sidebar_images_enabled} onChange={(checked) => updateField("sidebar_images_enabled", checked)} />
-            <ToggleField label={copy.sidebarSettings} checked={form.sidebar_settings_enabled} onChange={(checked) => updateField("sidebar_settings_enabled", checked)} />
-            <ToggleField label={copy.sidebarSystem} checked={form.sidebar_system_enabled} onChange={(checked) => updateField("sidebar_system_enabled", checked)} />
-            <ToggleField label={copy.sidebarAdminOverview} checked={form.sidebar_admin_overview_enabled} onChange={(checked) => updateField("sidebar_admin_overview_enabled", checked)} />
-            <ToggleField label={copy.sidebarChannels} checked={form.sidebar_channels_enabled} onChange={(checked) => updateField("sidebar_channels_enabled", checked)} />
-            <ToggleField label={copy.sidebarModels} checked={form.sidebar_models_enabled} onChange={(checked) => updateField("sidebar_models_enabled", checked)} />
-            <ToggleField label={copy.sidebarUsers} checked={form.sidebar_users_enabled} onChange={(checked) => updateField("sidebar_users_enabled", checked)} />
+          <div className="space-y-5">
+            <div className="grid gap-3 lg:grid-cols-2">
+              <ToggleField label={copy.sidebarDashboard} checked={form.sidebar_dashboard_enabled} onChange={(checked) => updateField("sidebar_dashboard_enabled", checked)} />
+              <ToggleField label={copy.sidebarUsage} checked={form.sidebar_usage_enabled} onChange={(checked) => updateField("sidebar_usage_enabled", checked)} />
+              <ToggleField label={copy.sidebarWallet} checked={form.sidebar_wallet_enabled} onChange={(checked) => updateField("sidebar_wallet_enabled", checked)} />
+              <ToggleField label={copy.sidebarDataBoard} checked={form.sidebar_data_board_enabled} onChange={(checked) => updateField("sidebar_data_board_enabled", checked)} />
+              <ToggleField label={copy.sidebarAPIKeys} checked={form.sidebar_api_keys_enabled} onChange={(checked) => updateField("sidebar_api_keys_enabled", checked)} />
+              <ToggleField label={copy.sidebarChat} checked={form.sidebar_chat_enabled} onChange={(checked) => updateField("sidebar_chat_enabled", checked)} />
+              <ToggleField label={copy.sidebarImages} checked={form.sidebar_images_enabled} onChange={(checked) => updateField("sidebar_images_enabled", checked)} />
+              <ToggleField label={copy.sidebarSettings} checked={form.sidebar_settings_enabled} onChange={(checked) => updateField("sidebar_settings_enabled", checked)} />
+              <ToggleField label={copy.sidebarSystem} checked={form.sidebar_system_enabled} onChange={(checked) => updateField("sidebar_system_enabled", checked)} />
+              <ToggleField label={copy.sidebarAdminOverview} checked={form.sidebar_admin_overview_enabled} onChange={(checked) => updateField("sidebar_admin_overview_enabled", checked)} />
+              <ToggleField label={copy.sidebarChannels} checked={form.sidebar_channels_enabled} onChange={(checked) => updateField("sidebar_channels_enabled", checked)} />
+              <ToggleField label={copy.sidebarModels} checked={form.sidebar_models_enabled} onChange={(checked) => updateField("sidebar_models_enabled", checked)} />
+              <ToggleField label={copy.sidebarUsers} checked={form.sidebar_users_enabled} onChange={(checked) => updateField("sidebar_users_enabled", checked)} />
+            </div>
+            <label className="block space-y-2 rounded-md border p-3 text-sm">
+              <span className="font-medium">{copy.chatPageMode}</span>
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={form.chat_page_mode || "basic"}
+                onChange={(event) => {
+                  if (event.target.value === "advanced" && !isPremiumEdition) {
+                    setIsPremiumNoticeOpen(true)
+                    return
+                  }
+                  updateField("chat_page_mode", event.target.value)
+                }}
+              >
+                <option value="basic">{copy.chatPageModeBasic}</option>
+                <option value="advanced" disabled={!isPremiumEdition}>
+                  {copy.chatPageModeAdvanced}
+                </option>
+              </select>
+              <p className="text-xs leading-5 text-muted-foreground">{copy.chatPageModeHint}</p>
+            </label>
           </div>
         </SettingsPanel>
       )}
@@ -2734,6 +2761,10 @@ const zhCopy = {
   sidebarDataBoard: "侧边栏：数据看板",
   sidebarAPIKeys: "侧边栏：令牌",
   sidebarChat: "侧边栏：聊天",
+  chatPageMode: "聊天页面",
+  chatPageModeBasic: "基础聊天（控制台内）",
+  chatPageModeAdvanced: "高级聊天（独立页面）",
+  chatPageModeHint: "高级聊天会打开独立 /chat 页面，需要高级版；非高级版会使用基础聊天。",
   sidebarImages: "侧边栏：AI 绘画",
   sidebarSettings: "侧边栏：设置",
   sidebarSystem: "侧边栏：系统管理",
@@ -3033,6 +3064,10 @@ const enCopy: SystemCopy = {
   sidebarDataBoard: "Sidebar: Data Board",
   sidebarAPIKeys: "Sidebar: API Keys",
   sidebarChat: "Sidebar: Chat",
+  chatPageMode: "Chat page",
+  chatPageModeBasic: "Basic chat (inside dashboard)",
+  chatPageModeAdvanced: "Advanced chat (standalone page)",
+  chatPageModeHint: "Advanced chat opens the standalone /chat page and requires premium edition. Non-premium editions use basic chat.",
   sidebarImages: "Sidebar: AI Images",
   sidebarSettings: "Sidebar: Settings",
   sidebarSystem: "Sidebar: System",

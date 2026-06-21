@@ -1,5 +1,6 @@
 export interface PublicSettings {
   edition: "community" | "premium" | string
+  chat_page_mode: "basic" | "advanced" | string
   site_name: string
   base_url: string
   icon_url: string
@@ -51,6 +52,7 @@ export interface PublicSettings {
 
 export const defaultPublicSettings: PublicSettings = {
   edition: "community",
+  chat_page_mode: "basic",
   site_name: "flai",
   base_url: "",
   icon_url: "",
@@ -102,6 +104,15 @@ export const defaultPublicSettings: PublicSettings = {
 
 export function withPublicSettingsDefaults(settings?: Partial<PublicSettings>): PublicSettings {
   return { ...defaultPublicSettings, ...(settings || {}) }
+}
+
+export function isAdvancedChatEnabled(settings?: Partial<PublicSettings>) {
+  const publicSettings = withPublicSettingsDefaults(settings)
+  return publicSettings.edition === "premium" && publicSettings.chat_page_mode === "advanced"
+}
+
+export function chatPathForSettings(settings?: Partial<PublicSettings>) {
+  return isAdvancedChatEnabled(settings) ? "/chat" : "/dashboard/chat"
 }
 
 export interface TopNavItem {

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Bot, Check, MessageSquarePlus, Pencil, Send, Trash2, User, X } from "lucide-react"
+import { Link } from "react-router-dom"
+import { Bot, Check, MessageSquarePlus, Pencil, Send, Settings, Trash2, User, X } from "lucide-react"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 
@@ -35,11 +37,35 @@ interface ChatSession {
   id: string
   title: string
   messages: ChatMessage[]
+  agent_id?: string
+  model_name?: string
+  created_at: string
+  updated_at: string
+}
+
+interface ChatAgent {
+  id: string
+  name: string
+  prompt: string
+  default_model: string
   created_at: string
   updated_at: string
 }
 
 type ChatEndpoint = "chat" | "responses" | "claude" | "gemini"
+type ChatMode = "basic" | "advanced"
+
+interface ChatProps {
+  variant?: ChatMode
+}
+
+interface ChatStoreKeys {
+  sessions: string
+  selectedSession: string
+  model: string
+  endpoint: string
+  apiKey: string
+}
 
 const sessionsStoreKey = "windypear.chat.sessions.v1"
 const legacyMessagesStoreKey = "windypear.chat.messages.v1"
@@ -47,16 +73,39 @@ const selectedSessionStoreKey = "windypear.chat.selected_session.v1"
 const modelStoreKey = "windypear.chat.model.v1"
 const endpointStoreKey = "windypear.chat.endpoint.v1"
 const apiKeyStoreKey = "windypear.chat.api_key_id.v1"
+const selectedAgentStoreKey = "windypear.advanced_chat.selected_agent.v1"
+const agentsQueryKey = ["advanced-chat-agents"] as const
 
-export default function Chat() {
+const chatStoreKeys: Record<ChatMode, ChatStoreKeys> = {
+  basic: {
+    sessions: sessionsStoreKey,
+    selectedSession: selectedSessionStoreKey,
+    model: modelStoreKey,
+    endpoint: endpointStoreKey,
+    apiKey: apiKeyStoreKey,
+  },
+  advanced: {
+    sessions: "windypear.advanced_chat.sessions.v1",
+    selectedSession: "windypear.advanced_chat.selected_session.v1",
+    model: "windypear.advanced_chat.model.v1",
+    endpoint: "windypear.advanced_chat.endpoint.v1",
+    apiKey: "windypear.advanced_chat.api_key_id.v1",
+  },
+}
+
+export default function Chat({ variant = "basic" }: ChatProps) {
+  const isAdvanced = variant === "advanced"
+  const storeKeys = chatStoreKeys[variant]
   const { language } = useI18n()
   const copy = language === "zh" ? zhCopy : enCopy
   const { error } = useToast()
-  const [sessions, setSessions] = useState<ChatSession[]>(() => readStoredSessions())
-  const [activeSessionID, setActiveSessionID] = useState(() => localStorage.getItem(selectedSessionStoreKey) || "")
-  const [modelName, setModelName] = useState(() => localStorage.getItem(modelStoreKey) || "")
-  const [endpointMode, setEndpointMode] = useState<ChatEndpoint>(() => readStoredEndpoint())
-  const [selectedAPIKeyID, setSelectedAPIKeyID] = useState(() => Number(localStorage.getItem(apiKeyStoreKey) || 0))
+  const [sessions, setSessions] = useState<ChatSession[]>(() => readStoredSessions(storeKeys.sessions, variant === "basic"))
+  const [activeSessionID, setActiveSessionID] = useState(() => localStorage.getItem(storeKeys.selectedSession) || "")
+  const [modelName, setModelName] = useState(() => localStorage.getItem(storeKeys.model) || "")
+  const [endpointMode, setEndpointMode] = useState<ChatEndpoint>(() => readStoredEndpoint(storeKeys.endpoint))
+  const [selectedAPIKeyID, setSelectedAPIKeyID] = useState(() => Number(localStorage.getItem(storeKeys.apiKey) || 0))
+  const [selectedAgentID, setSelectedAgentID] = useState(() => (isAdvanced ? localStorage.getItem(selectedAgentStoreKey) || "" : ""))
+  const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [prompt, setPrompt] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [editingMessageID, setEditingMessageID] = useState("")
@@ -78,6 +127,17 @@ export default function Chat() {
     },
   })
 
+  const { data: agents = [] } = useQuery<ChatAgent[]>({
+    queryKey: agentsQueryKey,
+    enabled: isAdvanced,
+    queryFn: async () => {
+      const res = await api.get("/user/advanced-chat/agents")
+      return Array.isArray(res.data)
+        ? res.data.map(normalizeAgent).filter((agent): agent is ChatAgent => Boolean(agent))
+        : []
+    },
+  })
+
   const modelOptions = useMemo(() => uniqueModels(catalog), [catalog])
   const selectableAPIKeys = useMemo(() => apiKeys.filter((key) => key.enabled && key.api_key), [apiKeys])
   const selectedAPIKey = useMemo(
@@ -88,10 +148,18 @@ export default function Chat() {
     () => sessions.find((session) => session.id === activeSessionID) || sessions[0],
     [sessions, activeSessionID]
   )
+  const selectedAgent = useMemo(() => {
+    if (!isAdvanced) {
+      return undefined
+    }
+    const sessionAgentID = activeSession?.agent_id || selectedAgentID
+    return agents.find((agent) => agent.id === sessionAgentID) || agents.find((agent) => agent.id === selectedAgentID) || agents[0]
+  }, [activeSession?.agent_id, agents, isAdvanced, selectedAgentID])
+  const activeModelName = isAdvanced ? activeSession?.model_name || selectedAgent?.default_model || modelName : modelName
 
   useEffect(() => {
-    localStorage.setItem(sessionsStoreKey, JSON.stringify(sessions))
-  }, [sessions])
+    localStorage.setItem(storeKeys.sessions, JSON.stringify(sessions))
+  }, [sessions, storeKeys.sessions])
 
   useEffect(() => {
     if (!activeSessionID && sessions[0]) {
@@ -105,19 +173,19 @@ export default function Chat() {
 
   useEffect(() => {
     if (activeSessionID) {
-      localStorage.setItem(selectedSessionStoreKey, activeSessionID)
+      localStorage.setItem(storeKeys.selectedSession, activeSessionID)
     }
-  }, [activeSessionID])
+  }, [activeSessionID, storeKeys.selectedSession])
 
   useEffect(() => {
-    if (modelName) {
-      localStorage.setItem(modelStoreKey, modelName)
+    if (!isAdvanced && modelName) {
+      localStorage.setItem(storeKeys.model, modelName)
     }
-  }, [modelName])
+  }, [isAdvanced, modelName, storeKeys.model])
 
   useEffect(() => {
-    localStorage.setItem(endpointStoreKey, endpointMode)
-  }, [endpointMode])
+    localStorage.setItem(storeKeys.endpoint, endpointMode)
+  }, [endpointMode, storeKeys.endpoint])
 
   useEffect(() => {
     if (!selectedAPIKey && selectedAPIKeyID !== 0) {
@@ -131,18 +199,52 @@ export default function Chat() {
 
   useEffect(() => {
     if (selectedAPIKeyID) {
-      localStorage.setItem(apiKeyStoreKey, String(selectedAPIKeyID))
+      localStorage.setItem(storeKeys.apiKey, String(selectedAPIKeyID))
     }
-  }, [selectedAPIKeyID])
+  }, [selectedAPIKeyID, storeKeys.apiKey])
 
   useEffect(() => {
-    if (!modelName && modelOptions.length > 0) {
+    if (!isAdvanced && !modelName && modelOptions.length > 0) {
       setModelName(modelOptions[0])
     }
-  }, [modelName, modelOptions])
+  }, [isAdvanced, modelName, modelOptions])
+
+  useEffect(() => {
+    if (!isAdvanced) {
+      return
+    }
+    if (selectedAgentID && agents.some((agent) => agent.id === selectedAgentID)) {
+      localStorage.setItem(selectedAgentStoreKey, selectedAgentID)
+      return
+    }
+    if (agents[0]) {
+      setSelectedAgentID(agents[0].id)
+      return
+    }
+    setSelectedAgentID("")
+    localStorage.removeItem(selectedAgentStoreKey)
+  }, [agents, isAdvanced, selectedAgentID])
+
+  useEffect(() => {
+    if (!isAdvanced || !activeSession || activeSession.model_name || modelOptions.length === 0) {
+      return
+    }
+    const defaultModel = selectedAgent?.default_model || modelOptions[0]
+    updateSession(activeSession.id, (session) => ({ ...session, model_name: defaultModel }))
+  }, [activeSession, isAdvanced, modelOptions, selectedAgent?.default_model])
+
+  useEffect(() => {
+    if (!isAdvanced || !activeSession || activeSession.agent_id || !selectedAgent) {
+      return
+    }
+    updateSession(activeSession.id, (session) => ({ ...session, agent_id: selectedAgent.id }))
+  }, [activeSession, isAdvanced, selectedAgent])
 
   const createNewSession = () => {
-    const session = createSession()
+    const session = createSession({
+      agentID: isAdvanced ? selectedAgent?.id || selectedAgentID : undefined,
+      modelName: isAdvanced ? selectedAgent?.default_model || modelOptions[0] || modelName : undefined,
+    })
     setSessions((current) => [session, ...current])
     setActiveSessionID(session.id)
     setPrompt("")
@@ -170,10 +272,32 @@ export default function Chat() {
     )
   }
 
+  const handleAgentSelection = (agentID: string) => {
+    setSelectedAgentID(agentID)
+    const agent = agents.find((item) => item.id === agentID)
+    if (!activeSession) {
+      return
+    }
+    updateSession(activeSession.id, (session) => ({
+      ...session,
+      agent_id: agentID || undefined,
+      model_name: agent?.default_model || session.model_name || modelOptions[0] || "",
+    }))
+  }
+
+  const handleSessionModelChange = (value: string) => {
+    if (isAdvanced && activeSession) {
+      updateSession(activeSession.id, (session) => ({ ...session, model_name: value }))
+      return
+    }
+    setModelName(value)
+  }
+
   const sendMessage = async () => {
     const content = prompt.trim()
     const rawKey = selectedAPIKey?.api_key.trim() || ""
     const session = activeSession
+    const resolvedModel = activeModelName.trim()
     if (!session) {
       return
     }
@@ -181,7 +305,7 @@ export default function Chat() {
       error(copy.keyRequired)
       return
     }
-    if (!modelName.trim()) {
+    if (!resolvedModel) {
       error(copy.modelRequired)
       return
     }
@@ -192,13 +316,13 @@ export default function Chat() {
     const userMessage = createMessage("user", content)
     const nextMessages = [...session.messages, userMessage]
     const nextTitle = session.title || titleFromMessage(content, copy)
-    updateSession(session.id, (current) => ({ ...current, title: nextTitle, messages: nextMessages }))
+    updateSession(session.id, (current) => ({ ...current, title: nextTitle, messages: nextMessages, model_name: resolvedModel }))
     setPrompt("")
     setIsSending(true)
     cancelEdit()
 
     try {
-      const request = chatRequest(endpointMode, modelName.trim(), rawKey, nextMessages)
+      const request = chatRequest(endpointMode, resolvedModel, rawKey, nextMessages, selectedAgent?.prompt || "")
       const response = await fetch(request.url, {
         method: "POST",
         headers: request.headers,
@@ -261,14 +385,66 @@ export default function Chat() {
     setEditingContent("")
   }
 
+  const basicConfig = (
+    <Card>
+      <CardHeader>
+        <CardTitle>{copy.config}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_220px_minmax(0,1fr)]">
+        <select
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+          value={selectedAPIKey?.id || ""}
+          onChange={(event) => setSelectedAPIKeyID(Number(event.target.value) || 0)}
+        >
+          <option value="">{selectableAPIKeys.length ? copy.selectKey : copy.noKeys}</option>
+          {selectableAPIKeys.map((key) => (
+            <option key={key.id} value={key.id}>
+              {key.name || key.key_prefix}
+            </option>
+          ))}
+        </select>
+        <select
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+          value={endpointMode}
+          onChange={(event) => setEndpointMode(normalizeEndpoint(event.target.value))}
+        >
+          <option value="chat">{copy.chatCompletions}</option>
+          <option value="responses">{copy.responsesAPI}</option>
+          <option value="claude">{copy.claudeMessages}</option>
+          <option value="gemini">{copy.geminiGenerate}</option>
+        </select>
+        <select
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+          value={modelName}
+          onChange={(event) => setModelName(event.target.value)}
+        >
+          <option value="">{copy.selectModel}</option>
+          {modelOptions.map((model) => (
+            <option key={model} value={model}>
+              {model}
+            </option>
+          ))}
+        </select>
+      </CardContent>
+    </Card>
+  )
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-3xl font-bold">{copy.title}</h1>
-        <Button className="gap-2" onClick={createNewSession}>
-          <MessageSquarePlus size={16} />
-          {copy.newSession}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {isAdvanced && (
+            <Button variant="outline" className="gap-2" onClick={() => setIsConfigOpen(true)}>
+              <Settings size={16} />
+              {copy.config}
+            </Button>
+          )}
+          <Button className="gap-2" onClick={createNewSession}>
+            <MessageSquarePlus size={16} />
+            {copy.newSession}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
@@ -307,47 +483,7 @@ export default function Chat() {
         </Card>
 
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>{copy.config}</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_220px_minmax(0,1fr)]">
-              <select
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={selectedAPIKey?.id || ""}
-                onChange={(event) => setSelectedAPIKeyID(Number(event.target.value) || 0)}
-              >
-                <option value="">{selectableAPIKeys.length ? copy.selectKey : copy.noKeys}</option>
-                {selectableAPIKeys.map((key) => (
-                  <option key={key.id} value={key.id}>
-                    {key.name || key.key_prefix}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={endpointMode}
-                onChange={(event) => setEndpointMode(normalizeEndpoint(event.target.value))}
-              >
-                <option value="chat">{copy.chatCompletions}</option>
-                <option value="responses">{copy.responsesAPI}</option>
-                <option value="claude">{copy.claudeMessages}</option>
-                <option value="gemini">{copy.geminiGenerate}</option>
-              </select>
-              <select
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={modelName}
-                onChange={(event) => setModelName(event.target.value)}
-              >
-                <option value="">{copy.selectModel}</option>
-                {modelOptions.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-            </CardContent>
-          </Card>
+          {!isAdvanced && basicConfig}
 
           <Card>
             <CardHeader>
@@ -428,13 +564,104 @@ export default function Chat() {
           </Card>
         </div>
       </div>
+
+      {isAdvanced && (
+        <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
+          <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{copy.advancedConfig}</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-5">
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">{copy.apiKey}</span>
+                  <select
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                    value={selectedAPIKey?.id || ""}
+                    onChange={(event) => setSelectedAPIKeyID(Number(event.target.value) || 0)}
+                  >
+                    <option value="">{selectableAPIKeys.length ? copy.selectKey : copy.noKeys}</option>
+                    {selectableAPIKeys.map((key) => (
+                      <option key={key.id} value={key.id}>
+                        {key.name || key.key_prefix}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">{copy.endpoint}</span>
+                  <select
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                    value={endpointMode}
+                    onChange={(event) => setEndpointMode(normalizeEndpoint(event.target.value))}
+                  >
+                    <option value="chat">{copy.chatCompletions}</option>
+                    <option value="responses">{copy.responsesAPI}</option>
+                    <option value="claude">{copy.claudeMessages}</option>
+                    <option value="gemini">{copy.geminiGenerate}</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm font-medium">{copy.agent}</div>
+                  <Button asChild variant="outline" size="sm">
+                    <Link to="/chat/agents">{copy.manageAgents}</Link>
+                  </Button>
+                </div>
+                <div className="grid gap-2">
+                  <select
+                    className="h-10 rounded-md border bg-background px-3 text-sm"
+                    value={selectedAgent?.id || ""}
+                    onChange={(event) => handleAgentSelection(event.target.value)}
+                  >
+                    <option value="">{agents.length ? copy.selectAgent : copy.noAgents}</option>
+                    {agents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {selectedAgent?.prompt && (
+                  <div className="line-clamp-3 whitespace-pre-wrap rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                    {selectedAgent.prompt}
+                  </div>
+                )}
+              </div>
+
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">{copy.sessionModel}</span>
+                <select
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  value={activeModelName}
+                  onChange={(event) => handleSessionModelChange(event.target.value)}
+                >
+                  <option value="">{copy.selectModel}</option>
+                  {modelOptions.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <DialogFooter>
+              <Button onClick={() => setIsConfigOpen(false)}>{copy.done}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
 
-function readStoredSessions(): ChatSession[] {
+function readStoredSessions(storeKey = sessionsStoreKey, includeLegacy = true): ChatSession[] {
   try {
-    const value = JSON.parse(localStorage.getItem(sessionsStoreKey) || "[]")
+    const value = JSON.parse(localStorage.getItem(storeKey) || "[]")
     const sessions = Array.isArray(value) ? value.map(normalizeSession).filter((session): session is ChatSession => Boolean(session)) : []
     if (sessions.length > 0) {
       return sessions
@@ -443,7 +670,7 @@ function readStoredSessions(): ChatSession[] {
     // Ignore invalid browser storage and fall back to a new session.
   }
 
-  const legacyMessages = readLegacyMessages()
+  const legacyMessages = includeLegacy ? readLegacyMessages() : []
   if (legacyMessages.length > 0) {
     const now = new Date().toISOString()
     return [{ id: createID(), title: "", messages: legacyMessages, created_at: now, updated_at: now }]
@@ -460,8 +687,8 @@ function readLegacyMessages(): ChatMessage[] {
   }
 }
 
-function readStoredEndpoint(): ChatEndpoint {
-  return normalizeEndpoint(localStorage.getItem(endpointStoreKey) || "chat")
+function readStoredEndpoint(storeKey = endpointStoreKey): ChatEndpoint {
+  return normalizeEndpoint(localStorage.getItem(storeKey) || "chat")
 }
 
 function normalizeEndpoint(value: string): ChatEndpoint {
@@ -471,13 +698,13 @@ function normalizeEndpoint(value: string): ChatEndpoint {
   return "chat"
 }
 
-function chatRequest(endpoint: ChatEndpoint, modelName: string, apiKey: string, messages: ChatMessage[]) {
+function chatRequest(endpoint: ChatEndpoint, modelName: string, apiKey: string, messages: ChatMessage[], systemPrompt: string) {
   const headers: Record<string, string> = { "Content-Type": "application/json" }
   if (endpoint === "gemini") {
     return {
       url: `/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`,
       headers,
-      body: chatRequestPayload(endpoint, modelName, messages),
+      body: chatRequestPayload(endpoint, modelName, messages, systemPrompt),
     }
   }
   if (endpoint === "claude") {
@@ -485,36 +712,42 @@ function chatRequest(endpoint: ChatEndpoint, modelName: string, apiKey: string, 
     return {
       url: "/v1/messages",
       headers,
-      body: chatRequestPayload(endpoint, modelName, messages),
+      body: chatRequestPayload(endpoint, modelName, messages, systemPrompt),
     }
   }
   headers.Authorization = `Bearer ${apiKey}`
   return {
     url: endpoint === "responses" ? "/v1/responses" : "/v1/chat/completions",
     headers,
-    body: chatRequestPayload(endpoint, modelName, messages),
+    body: chatRequestPayload(endpoint, modelName, messages, systemPrompt),
   }
 }
 
-function chatRequestPayload(endpoint: ChatEndpoint, modelName: string, messages: ChatMessage[]) {
+function chatRequestPayload(endpoint: ChatEndpoint, modelName: string, messages: ChatMessage[], systemPrompt: string) {
+  const prompt = systemPrompt.trim()
   if (endpoint === "responses") {
     return {
       model: modelName,
-      input: messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
+      input: [
+        ...(prompt ? [{ role: "system", content: prompt }] : []),
+        ...messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
+      ],
     }
   }
   if (endpoint === "claude") {
     return {
       model: modelName,
       max_tokens: 1024,
+      ...(prompt ? { system: prompt } : {}),
       messages: messages.map((message) => ({ role: message.role, content: message.content })),
     }
   }
   if (endpoint === "gemini") {
     return {
+      ...(prompt ? { systemInstruction: { parts: [{ text: prompt }] } } : {}),
       contents: messages.map((message) => ({
         role: message.role === "assistant" ? "model" : "user",
         parts: [{ text: message.content }],
@@ -523,7 +756,10 @@ function chatRequestPayload(endpoint: ChatEndpoint, modelName: string, messages:
   }
   return {
     model: modelName,
-    messages: messages.map((message) => ({ role: message.role, content: message.content })),
+    messages: [
+      ...(prompt ? [{ role: "system", content: prompt }] : []),
+      ...messages.map((message) => ({ role: message.role, content: message.content })),
+    ],
   }
 }
 
@@ -598,6 +834,8 @@ function normalizeSession(value: unknown): ChatSession | null {
     id: typeof value.id === "string" && value.id ? value.id : createID(),
     title: typeof value.title === "string" ? value.title : "",
     messages,
+    agent_id: stringFromUnknown(value.agent_id),
+    model_name: stringFromUnknown(value.model_name),
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
@@ -622,9 +860,35 @@ function normalizeMessage(value: unknown): ChatMessage | null {
   }
 }
 
-function createSession(): ChatSession {
+function normalizeAgent(value: unknown): ChatAgent | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  const id = stringFromUnknown(value.id)
+  if (!id) {
+    return null
+  }
+  return {
+    id,
+    name: typeof value.name === "string" ? value.name : "",
+    prompt: typeof value.prompt === "string" ? value.prompt : "",
+    default_model: typeof value.default_model === "string" ? value.default_model : "",
+    created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
+    updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
+  }
+}
+
+function createSession(input: { agentID?: string; modelName?: string } = {}): ChatSession {
   const now = new Date().toISOString()
-  return { id: createID(), title: "", messages: [], created_at: now, updated_at: now }
+  return {
+    id: createID(),
+    title: "",
+    messages: [],
+    agent_id: input.agentID || undefined,
+    model_name: input.modelName || undefined,
+    created_at: now,
+    updated_at: now,
+  }
 }
 
 function createMessage(role: ChatMessage["role"], content: string): ChatMessage {
@@ -670,6 +934,16 @@ function normalizeAPIKey(value: unknown): APIKey {
   }
 }
 
+function stringFromUnknown(value: unknown) {
+  if (typeof value === "string") {
+    return value
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value)
+  }
+  return undefined
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
 }
@@ -682,6 +956,31 @@ const zhCopy = {
   messageCount: "{count} 条消息",
   deleteSession: "删除会话",
   config: "配置",
+  advancedConfig: "高级聊天配置",
+  apiKey: "令牌",
+  endpoint: "接口",
+  agent: "智能体",
+  noAgentSelected: "未选择智能体",
+  selectAgent: "选择智能体",
+  noAgents: "暂无智能体",
+  manageAgents: "管理智能体",
+  newAgent: "新建智能体",
+  editAgent: "编辑",
+  deleteAgent: "删除",
+  agentName: "智能体名称",
+  defaultAgentName: "默认智能体",
+  agentPrompt: "提示词",
+  agentPromptPlaceholder: "输入这个智能体的系统提示词",
+  agentDefaultModel: "默认模型",
+  saveAgent: "保存智能体",
+  agentSaved: "智能体已保存",
+  agentDeleted: "智能体已删除",
+  agentNameRequired: "请输入智能体名称",
+  agentDefaultModelRequired: "请选择智能体默认模型",
+  agentSaveFailed: "保存智能体失败",
+  agentDeleteFailed: "删除智能体失败",
+  sessionModel: "会话模型",
+  done: "完成",
   chatCompletions: "Chat Completions",
   responsesAPI: "Responses",
   claudeMessages: "Claude Messages",
@@ -712,6 +1011,31 @@ const enCopy: typeof zhCopy = {
   messageCount: "{count} messages",
   deleteSession: "Delete session",
   config: "Config",
+  advancedConfig: "Advanced chat config",
+  apiKey: "Token",
+  endpoint: "Endpoint",
+  agent: "Agent",
+  noAgentSelected: "No agent",
+  selectAgent: "Select agent",
+  noAgents: "No agents",
+  manageAgents: "Manage agents",
+  newAgent: "New agent",
+  editAgent: "Edit",
+  deleteAgent: "Delete",
+  agentName: "Agent name",
+  defaultAgentName: "Default agent",
+  agentPrompt: "Prompt",
+  agentPromptPlaceholder: "Enter this agent's system prompt",
+  agentDefaultModel: "Default model",
+  saveAgent: "Save agent",
+  agentSaved: "Agent saved",
+  agentDeleted: "Agent deleted",
+  agentNameRequired: "Enter an agent name",
+  agentDefaultModelRequired: "Select a default model for the agent",
+  agentSaveFailed: "Failed to save agent",
+  agentDeleteFailed: "Failed to delete agent",
+  sessionModel: "Session model",
+  done: "Done",
   chatCompletions: "Chat Completions",
   responsesAPI: "Responses",
   claudeMessages: "Claude Messages",

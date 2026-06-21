@@ -17,6 +17,7 @@ import Settings from "./pages/Settings"
 import Wallet from "./pages/Wallet"
 import APIKeys from "./pages/APIKeys"
 import Chat from "./pages/Chat"
+import AdvancedChat from "./pages/AdvancedChat"
 import Images from "./pages/Images"
 import SystemManagement from "./pages/SystemManagement"
 import AdminOverview from "./pages/AdminOverview"
@@ -27,7 +28,7 @@ import { I18nProvider, useI18n } from "./lib/i18n"
 import { ToastProvider } from "./components/ui/toast"
 import type { TranslationKey } from "./lib/i18n"
 import type { PublicSettings } from "./lib/public-settings"
-import { withPublicSettingsDefaults } from "./lib/public-settings"
+import { isAdvancedChatEnabled, withPublicSettingsDefaults } from "./lib/public-settings"
 
 const queryClient = new QueryClient()
 
@@ -91,6 +92,35 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/dashboard" replace />
   }
   return <>{children}</>
+}
+
+const AdvancedChatRoute = () => {
+  const { t } = useI18n()
+  const { data: settings, isLoading } = useQuery<PublicSettings>({
+    queryKey: ["public-settings"],
+    queryFn: async () => {
+      const res = await api.get("/public/settings")
+      return res.data
+    },
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        {t("common.loading")}
+      </div>
+    )
+  }
+
+  if (!isAdvancedChatEnabled(settings)) {
+    return <Navigate to="/dashboard/chat" replace />
+  }
+
+  return (
+    <PageTransition>
+      <AdvancedChat />
+    </PageTransition>
+  )
 }
 
 const SetupGate = ({ children }: { children: React.ReactNode }) => {
@@ -204,8 +234,14 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
   if (normalizedPathname === "/dashboard/api-keys") {
     return t("settings.apiKeys")
   }
+  if (normalizedPathname === "/chat") {
+    return t("nav.chat")
+  }
+  if (normalizedPathname === "/chat/agents") {
+    return t("nav.agents")
+  }
   if (normalizedPathname === "/dashboard/chat") {
-    return language === "zh" ? "聊天" : "Chat"
+    return t("nav.chat")
   }
   if (normalizedPathname === "/dashboard/images") {
     return language === "zh" ? "AI 绘画" : "AI Images"
@@ -253,6 +289,14 @@ function App() {
               <Route path="/about" element={<PageTransition><PublicContent kind="about" /></PageTransition>} />
               <Route path="/privacy" element={<PageTransition><PublicContent kind="privacy" /></PageTransition>} />
               <Route path="/terms" element={<PageTransition><PublicContent kind="terms" /></PageTransition>} />
+              <Route
+                path="/chat/*"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <AdvancedChatRoute />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/dashboard"
                 element={
