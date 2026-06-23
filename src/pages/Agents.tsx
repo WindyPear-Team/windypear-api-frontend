@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/toast"
+import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 interface UserChannelCatalog {
@@ -28,6 +29,7 @@ const agentsQueryKey = ["advanced-chat-agents"] as const
 export default function Agents() {
   const queryClient = useQueryClient()
   const { error, success } = useToast()
+  const { t } = useI18n()
   const [activeAgentID, setActiveAgentID] = useState("")
   const [name, setName] = useState("")
   const [prompt, setPrompt] = useState("")
@@ -72,7 +74,7 @@ export default function Agents() {
   }, [createDefaultModel, defaultModel, modelOptions])
 
   const openCreateDialog = () => {
-    setCreateName("默认智能体")
+    setCreateName(t("chat.defaultAgentName"))
     setCreatePrompt("")
     setCreateDefaultModel(modelOptions[0] || "")
     setIsCreateOpen(true)
@@ -102,11 +104,11 @@ export default function Agents() {
     const trimmedName = createName.trim()
     const trimmedModel = createDefaultModel.trim()
     if (!trimmedName) {
-      error("请输入智能体名称")
+      error(t("chat.agentNameRequired"))
       return
     }
     if (!trimmedModel) {
-      error("请选择默认模型")
+      error(t("chat.agentDefaultModelRequired"))
       return
     }
 
@@ -123,9 +125,9 @@ export default function Agents() {
         setEditForm(savedAgent)
       }
       setIsCreateOpen(false)
-      success("智能体已创建")
+      success(t("chat.agentCreated"))
     } catch (err) {
-      error(apiErrorMessage(err, "创建智能体失败"))
+      error(apiErrorMessage(err, t("chat.agentCreateFailed")))
     } finally {
       setIsCreating(false)
     }
@@ -135,15 +137,15 @@ export default function Agents() {
     const trimmedName = name.trim()
     const trimmedModel = defaultModel.trim()
     if (!activeAgentID) {
-      error("请选择智能体")
+      error(t("chat.agentSelectRequired"))
       return
     }
     if (!trimmedName) {
-      error("请输入智能体名称")
+      error(t("chat.agentNameRequired"))
       return
     }
     if (!trimmedModel) {
-      error("请选择默认模型")
+      error(t("chat.agentDefaultModelRequired"))
       return
     }
 
@@ -160,9 +162,9 @@ export default function Agents() {
         setEditForm(savedAgent)
       }
       setIsEditOpen(false)
-      success("智能体已保存")
+      success(t("chat.agentSaved"))
     } catch (err) {
-      error(apiErrorMessage(err, "保存智能体失败"))
+      error(apiErrorMessage(err, t("chat.agentSaveFailed")))
     } finally {
       setIsSaving(false)
     }
@@ -176,9 +178,9 @@ export default function Agents() {
       if (activeAgentID === agent.id) {
         clearEdit()
       }
-      success("智能体已删除")
+      success(t("chat.agentDeleted"))
     } catch (err) {
-      error(apiErrorMessage(err, "删除智能体失败"))
+      error(apiErrorMessage(err, t("chat.agentDeleteFailed")))
     } finally {
       setDeletingAgentID("")
     }
@@ -188,22 +190,22 @@ export default function Agents() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">智能体</h1>
-          <p className="mt-1 text-sm text-muted-foreground">为高级独立聊天配置提示词和默认模型。</p>
+          <h1 className="text-3xl font-bold">{t("nav.agents")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("advancedChat.agents.subtitle")}</p>
         </div>
         <Button className="gap-2" onClick={openCreateDialog}>
           <Plus size={16} />
-          新建智能体
+          {t("chat.newAgent")}
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>智能体列表</CardTitle>
+          <CardTitle>{t("advancedChat.agents.list")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {agents.length === 0 ? (
-            <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">暂无智能体</div>
+            <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">{t("chat.noAgents")}</div>
           ) : (
             agents.map((agent) => (
               <div
@@ -225,7 +227,7 @@ export default function Agents() {
                   size="sm"
                   disabled={deletingAgentID === agent.id}
                   onClick={() => deleteAgent(agent)}
-                  title="删除智能体"
+                  title={t("chat.deleteAgent")}
                 >
                   <Trash2 size={15} />
                 </Button>
@@ -238,12 +240,12 @@ export default function Agents() {
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>编辑智能体</DialogTitle>
+            <DialogTitle>{t("chat.editAgent")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-1 text-sm">
-                <span className="font-medium">名称</span>
+                <span className="font-medium">{t("common.name")}</span>
                 <input
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                   value={name}
@@ -251,13 +253,13 @@ export default function Agents() {
                 />
               </label>
               <label className="space-y-1 text-sm">
-                <span className="font-medium">默认模型</span>
+                <span className="font-medium">{t("chat.agentDefaultModel")}</span>
                 <select
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                   value={defaultModel}
                   onChange={(event) => setDefaultModel(event.target.value)}
                 >
-                  <option value="">选择模型</option>
+                  <option value="">{t("chat.selectModel")}</option>
                   {modelOptions.map((model) => (
                     <option key={model} value={model}>
                       {model}
@@ -267,22 +269,22 @@ export default function Agents() {
               </label>
             </div>
             <label className="space-y-1 text-sm">
-              <span className="font-medium">提示词</span>
+              <span className="font-medium">{t("chat.agentPrompt")}</span>
               <textarea
                 className="min-h-72 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                 value={prompt}
-                placeholder="输入这个智能体的系统提示词"
+                placeholder={t("chat.agentPromptPlaceholder")}
                 onChange={(event) => setPrompt(event.target.value)}
               />
             </label>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsEditOpen(false)}>
-              取消
+              {t("common.cancel")}
             </Button>
             <Button className="gap-2" disabled={isSaving} onClick={saveAgent}>
               <Save size={16} />
-              {isSaving ? "保存中" : "保存"}
+              {isSaving ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -291,12 +293,12 @@ export default function Agents() {
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>新建智能体</DialogTitle>
+            <DialogTitle>{t("chat.newAgent")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-1 text-sm">
-                <span className="font-medium">名称</span>
+                <span className="font-medium">{t("common.name")}</span>
                 <input
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                   value={createName}
@@ -304,13 +306,13 @@ export default function Agents() {
                 />
               </label>
               <label className="space-y-1 text-sm">
-                <span className="font-medium">默认模型</span>
+                <span className="font-medium">{t("chat.agentDefaultModel")}</span>
                 <select
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                   value={createDefaultModel}
                   onChange={(event) => setCreateDefaultModel(event.target.value)}
                 >
-                  <option value="">选择模型</option>
+                  <option value="">{t("chat.selectModel")}</option>
                   {modelOptions.map((model) => (
                     <option key={model} value={model}>
                       {model}
@@ -320,22 +322,22 @@ export default function Agents() {
               </label>
             </div>
             <label className="space-y-1 text-sm">
-              <span className="font-medium">提示词</span>
+              <span className="font-medium">{t("chat.agentPrompt")}</span>
               <textarea
                 className="min-h-48 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                 value={createPrompt}
-                placeholder="输入这个智能体的系统提示词"
+                placeholder={t("chat.agentPromptPlaceholder")}
                 onChange={(event) => setCreatePrompt(event.target.value)}
               />
             </label>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>
-              取消
+              {t("common.cancel")}
             </Button>
             <Button className="gap-2" disabled={isCreating} onClick={createAgent}>
               <Save size={16} />
-              {isCreating ? "创建中" : "创建"}
+              {isCreating ? t("common.creating") : t("common.create")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import api from "@/lib/api"
+import { useI18n } from "@/lib/i18n"
 import { useToast } from "@/components/ui/toast"
 
 interface MCPServer {
@@ -56,6 +57,7 @@ const emptyDraft: MCPDraft = {
 export default function AdvancedChatMCP() {
   const queryClient = useQueryClient()
   const { success, error } = useToast()
+  const { t } = useI18n()
   const [customServers, setCustomServers] = useState<MCPServer[]>([])
   const [draft, setDraft] = useState<MCPDraft>(emptyDraft)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -95,10 +97,10 @@ export default function AdvancedChatMCP() {
     },
     onSuccess: (saved) => {
       setCustomServers(saved.custom_mcp_servers)
-      success("MCP 服务器已保存")
+      success(t("advancedChat.mcp.saved"))
       queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
     },
-    onError: (err) => error(apiErrorMessage(err, "保存 MCP 服务器失败")),
+    onError: (err) => error(apiErrorMessage(err, t("advancedChat.mcp.saveFailed"))),
   })
 
   const openCreateDialog = () => {
@@ -127,7 +129,7 @@ export default function AdvancedChatMCP() {
       request_mode: "backend",
     }
     if (!next.name || !next.url) {
-      error("请输入 MCP 名称和服务器地址")
+      error(t("advancedChat.mcp.nameURLRequired"))
       return
     }
     setCustomServers((current) => (draft.id ? current.map((server) => (server.id === draft.id ? next : server)) : [...current, next]))
@@ -142,28 +144,28 @@ export default function AdvancedChatMCP() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">MCP 服务器</h1>
-          <div className="mt-2 text-sm text-muted-foreground">管理员内置 MCP 和你的自定义 MCP 会在同一列表中展示；所有 MCP 均由后端统一请求调用。</div>
+          <h1 className="text-3xl font-bold">{t("advancedChat.mcp.title")}</h1>
+          <div className="mt-2 text-sm text-muted-foreground">{t("advancedChat.mcp.subtitle")}</div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" onClick={openCreateDialog}>
             <Plus size={16} />
-            添加
+            {t("common.add")}
           </Button>
           <Button className="gap-2" disabled={saveServers.isPending} onClick={() => saveServers.mutate()}>
             <Save size={16} />
-            {saveServers.isPending ? "保存中" : "保存"}
+            {saveServers.isPending ? t("common.saving") : t("common.save")}
           </Button>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>MCP 列表</CardTitle>
+          <CardTitle>{t("advancedChat.mcp.list")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {allServers.length === 0 ? (
-            <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">暂无 MCP 服务器</div>
+            <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">{t("advancedChat.mcp.empty")}</div>
           ) : (
             allServers.map((server) => (
               <div key={`${server.request_mode}-${server.id}`} className="flex items-center justify-between gap-3 rounded-md border p-3">
@@ -172,20 +174,20 @@ export default function AdvancedChatMCP() {
                     <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="truncate text-sm font-medium">{server.name}</span>
                     <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      {server.readonly ? "管理员内置" : "我的"}
+                      {server.readonly ? t("advancedChat.mcp.adminBuiltin") : t("common.mine")}
                     </span>
-                    {!server.enabled && <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">停用</span>}
+                    {!server.enabled && <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">{t("common.disabled")}</span>}
                   </div>
                   <div className="mt-1 truncate text-xs text-muted-foreground">{server.url}</div>
                 </div>
                 {server.readonly ? (
-                  <div className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">只读</div>
+                  <div className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{t("common.readOnly")}</div>
                 ) : (
                   <div className="flex shrink-0 gap-2">
-                    <Button variant="outline" size="icon" onClick={() => openEditDialog(server)} aria-label="编辑 MCP 服务器" title="编辑 MCP 服务器">
+                    <Button variant="outline" size="icon" onClick={() => openEditDialog(server)} aria-label={t("advancedChat.mcp.editServer")} title={t("advancedChat.mcp.editServer")}>
                       <Pencil size={16} />
                     </Button>
-                    <Button variant="outline" size="icon" onClick={() => removeServer(server.id)} aria-label="删除 MCP 服务器" title="删除 MCP 服务器">
+                    <Button variant="outline" size="icon" onClick={() => removeServer(server.id)} aria-label={t("advancedChat.mcp.deleteServer")} title={t("advancedChat.mcp.deleteServer")}>
                       <Trash2 size={16} />
                     </Button>
                   </div>
@@ -199,37 +201,37 @@ export default function AdvancedChatMCP() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{draft.id ? "编辑 MCP" : "添加 MCP"}</DialogTitle>
+            <DialogTitle>{draft.id ? t("advancedChat.mcp.editDialogTitle") : t("advancedChat.mcp.addDialogTitle")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4">
             <label className="space-y-1 text-sm">
-              <span className="font-medium">名称</span>
+              <span className="font-medium">{t("common.name")}</span>
               <Input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
             </label>
             <label className="space-y-1 text-sm">
-              <span className="font-medium">服务器地址</span>
-              <Input value={draft.url} placeholder="https://mcp.example.com" onChange={(event) => setDraft((current) => ({ ...current, url: event.target.value }))} />
+              <span className="font-medium">{t("advancedChat.mcp.serverURL")}</span>
+              <Input value={draft.url} placeholder={t("advancedChat.mcp.urlPlaceholder")} onChange={(event) => setDraft((current) => ({ ...current, url: event.target.value }))} />
             </label>
             <label className="space-y-1 text-sm">
-              <span className="font-medium">请求头（可选）</span>
+              <span className="font-medium">{t("advancedChat.mcp.headers")}</span>
               <textarea
                 className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                 value={draft.headers}
-                placeholder={'{"Authorization":"Bearer ..."} 或每行 Header: value'}
+                placeholder={t("advancedChat.mcp.headersPlaceholder")}
                 onChange={(event) => setDraft((current) => ({ ...current, headers: event.target.value }))}
               />
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} />
-              启用
+              {t("advancedChat.mcp.enabledLabel")}
             </label>
-            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">用户自定义 MCP 会保存到后端，并由后端在聊天时统一调用。请求头仅用于后端访问该 MCP 服务器。</div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">{t("advancedChat.mcp.hint")}</div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsDialogOpen(false)}>
-              取消
+              {t("common.cancel")}
             </Button>
-            <Button onClick={applyDraft}>确定</Button>
+            <Button onClick={applyDraft}>{t("common.confirm")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -6,13 +6,14 @@ import { cn } from "@/lib/utils"
 
 interface LanguageOption {
   value: Language
-  labelKey: "language.chinese" | "language.english"
-  descriptionKey: "language.chineseDescription" | "language.englishDescription"
+  labelKey: "language.chinese" | "language.english" | "language.japanese"
+  descriptionKey: "language.chineseDescription" | "language.englishDescription" | "language.japaneseDescription"
 }
 
 const languageOptions: LanguageOption[] = [
   { value: "zh", labelKey: "language.chinese", descriptionKey: "language.chineseDescription" },
   { value: "en", labelKey: "language.english", descriptionKey: "language.englishDescription" },
+  { value: "ja", labelKey: "language.japanese", descriptionKey: "language.japaneseDescription" },
 ]
 
 export function LanguageSwitcher({

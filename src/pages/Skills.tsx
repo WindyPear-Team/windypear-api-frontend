@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/toast"
+import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 interface MCPServer {
@@ -41,87 +42,54 @@ interface PromptTemplate {
 
 const skillsQueryKey = ["advanced-chat-skills"] as const
 
-// 预设提示词模板：覆盖常见"做某事该怎么做"的场景，选中后填充到提示词编辑框，可再编辑。
-const promptTemplates: PromptTemplate[] = [
+const promptTemplateDefinitions = [
   {
     id: "code-review",
-    title: "代码审查",
-    description: "审查代码质量、安全与可维护性",
-    prompt: [
-      "你是一名资深软件工程师，负责对用户提供的代码进行审查。",
-      "请按以下方面给出反馈：",
-      "1. 正确性：是否存在逻辑错误或边界问题。",
-      "2. 安全性：是否有注入、越权、敏感信息泄露等风险。",
-      "3. 性能：是否有明显的性能瓶颈或不必要的开销。",
-      "4. 可读性与可维护性：命名、结构、注释是否清晰。",
-      "对每个问题给出具体位置、原因和修改建议；先列出最严重的问题。",
-    ].join("\n"),
+    titleKey: "advancedChat.skills.template.codeReview.title",
+    descriptionKey: "advancedChat.skills.template.codeReview.description",
+    promptKey: "advancedChat.skills.template.codeReview.prompt",
   },
   {
     id: "writing",
-    title: "文章写作",
-    description: "撰写结构清晰、表达流畅的文章",
-    prompt: [
-      "你是一名专业中文写作助手。",
-      "根据用户给出的主题和要求撰写文章，遵循：",
-      "1. 先明确目标读者与文章目的。",
-      "2. 用清晰的结构组织内容（引言、主体、结论）。",
-      "3. 语言简洁流畅，避免空话套话。",
-      "4. 必要时给出小标题和要点列表。",
-      "完成后简要说明文章的结构思路。",
-    ].join("\n"),
+    titleKey: "advancedChat.skills.template.writing.title",
+    descriptionKey: "advancedChat.skills.template.writing.description",
+    promptKey: "advancedChat.skills.template.writing.prompt",
   },
   {
     id: "translation",
-    title: "翻译",
-    description: "在中英文之间进行准确、自然的翻译",
-    prompt: [
-      "你是一名专业翻译。",
-      "请在中英文之间翻译用户提供的内容，要求：",
-      "1. 忠实原意，不增删信息。",
-      "2. 译文自然流畅，符合目标语言表达习惯。",
-      "3. 专业术语保持准确一致。",
-      "4. 遇到歧义时，给出最可能的译法并简要说明。",
-    ].join("\n"),
+    titleKey: "advancedChat.skills.template.translation.title",
+    descriptionKey: "advancedChat.skills.template.translation.description",
+    promptKey: "advancedChat.skills.template.translation.prompt",
   },
   {
     id: "data-analysis",
-    title: "数据分析",
-    description: "解读数据并给出可执行结论",
-    prompt: [
-      "你是一名数据分析师。",
-      "针对用户提供的数据或问题，请：",
-      "1. 明确分析目标和关键指标。",
-      "2. 描述数据中的关键趋势、异常和相关性。",
-      "3. 用通俗语言解释结论，避免堆砌术语。",
-      "4. 给出可执行的建议和下一步分析方向。",
-      "如信息不足，先说明还需要哪些数据。",
-    ].join("\n"),
+    titleKey: "advancedChat.skills.template.dataAnalysis.title",
+    descriptionKey: "advancedChat.skills.template.dataAnalysis.description",
+    promptKey: "advancedChat.skills.template.dataAnalysis.prompt",
   },
   {
     id: "tutor",
-    title: "学习辅导",
-    description: "用循序渐进的方式讲解知识点",
-    prompt: [
-      "你是一名耐心的辅导老师。",
-      "讲解用户提出的知识点时，请：",
-      "1. 先用一句话给出直观概括。",
-      "2. 由浅入深拆解，配合简单例子。",
-      "3. 适时提出小问题检验理解。",
-      "4. 最后总结要点并推荐练习方向。",
-    ].join("\n"),
+    titleKey: "advancedChat.skills.template.tutor.title",
+    descriptionKey: "advancedChat.skills.template.tutor.description",
+    promptKey: "advancedChat.skills.template.tutor.prompt",
   },
   {
     id: "blank",
-    title: "空白模板",
-    description: "从零开始自定义提示词",
-    prompt: "",
+    titleKey: "advancedChat.skills.template.blank.title",
+    descriptionKey: "advancedChat.skills.template.blank.description",
+    promptKey: "advancedChat.skills.template.blank.prompt",
   },
-]
+] as const satisfies readonly {
+  id: string
+  titleKey: TranslationKey
+  descriptionKey: TranslationKey
+  promptKey: TranslationKey
+}[]
 
 export default function Skills() {
   const queryClient = useQueryClient()
   const { error, success } = useToast()
+  const { t } = useI18n()
 
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editingSkillID, setEditingSkillID] = useState("")
@@ -160,6 +128,16 @@ export default function Skills() {
     mcpServers.forEach((server) => map.set(server.id, server.name))
     return map
   }, [mcpServers])
+  const promptTemplates = useMemo<PromptTemplate[]>(
+    () =>
+      promptTemplateDefinitions.map((template) => ({
+        id: template.id,
+        title: t(template.titleKey),
+        description: t(template.descriptionKey),
+        prompt: t(template.promptKey),
+      })),
+    [t]
+  )
 
   const resetForm = () => {
     setEditingSkillID("")
@@ -172,7 +150,7 @@ export default function Skills() {
 
   const openCreateDialog = () => {
     resetForm()
-    setName("新技能")
+    setName(t("advancedChat.skills.defaultName"))
     setIsEditOpen(true)
   }
 
@@ -203,7 +181,7 @@ export default function Skills() {
   const saveSkill = async () => {
     const trimmedName = name.trim()
     if (!trimmedName) {
-      error("请输入技能名称")
+      error(t("advancedChat.skills.nameRequired"))
       return
     }
 
@@ -224,9 +202,9 @@ export default function Skills() {
       await queryClient.invalidateQueries({ queryKey: skillsQueryKey })
       setIsEditOpen(false)
       resetForm()
-      success(editingSkillID ? "技能已保存" : "技能已创建")
+      success(editingSkillID ? t("advancedChat.skills.saved") : t("advancedChat.skills.created"))
     } catch (err) {
-      error(apiErrorMessage(err, "保存技能失败"))
+      error(apiErrorMessage(err, t("advancedChat.skills.saveFailed")))
     } finally {
       setIsSaving(false)
     }
@@ -237,9 +215,9 @@ export default function Skills() {
     try {
       await api.delete(`/user/advanced-chat/skills/${encodeURIComponent(skill.id)}`)
       await queryClient.invalidateQueries({ queryKey: skillsQueryKey })
-      success("技能已删除")
+      success(t("advancedChat.skills.deleted"))
     } catch (err) {
-      error(apiErrorMessage(err, "删除技能失败"))
+      error(apiErrorMessage(err, t("advancedChat.skills.deleteFailed")))
     } finally {
       setDeletingSkillID("")
     }
@@ -249,22 +227,22 @@ export default function Skills() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">技能</h1>
-          <p className="mt-1 text-sm text-muted-foreground">为高级独立聊天创建技能，组合提示词和 MCP 服务器。</p>
+          <h1 className="text-3xl font-bold">{t("nav.skills")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("advancedChat.skills.subtitle")}</p>
         </div>
         <Button className="gap-2" onClick={openCreateDialog}>
           <Plus size={16} />
-          新建技能
+          {t("advancedChat.skills.newSkill")}
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>技能列表</CardTitle>
+          <CardTitle>{t("advancedChat.skills.list")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {skills.length === 0 ? (
-            <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">暂无技能</div>
+            <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">{t("advancedChat.skills.empty")}</div>
           ) : (
             skills.map((skill) => (
               <div
@@ -298,7 +276,7 @@ export default function Skills() {
                   size="sm"
                   disabled={deletingSkillID === skill.id}
                   onClick={() => deleteSkill(skill)}
-                  title="删除技能"
+                  title={t("advancedChat.skills.deleteSkill")}
                 >
                   <Trash2 size={15} />
                 </Button>
@@ -311,11 +289,11 @@ export default function Skills() {
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingSkillID ? "编辑技能" : "新建技能"}</DialogTitle>
+            <DialogTitle>{editingSkillID ? t("advancedChat.skills.editSkill") : t("advancedChat.skills.newSkill")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <label className="space-y-1 text-sm">
-              <span className="font-medium">名称</span>
+              <span className="font-medium">{t("common.name")}</span>
               <input
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 value={name}
@@ -324,11 +302,11 @@ export default function Skills() {
             </label>
 
             <label className="space-y-1 text-sm">
-              <span className="font-medium">描述</span>
+              <span className="font-medium">{t("common.description")}</span>
               <input
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 value={description}
-                placeholder="简单描述这个技能的用途"
+                placeholder={t("advancedChat.skills.descriptionPlaceholder")}
                 onChange={(event) => setDescription(event.target.value)}
               />
             </label>
@@ -336,7 +314,7 @@ export default function Skills() {
             <div className="space-y-2 text-sm">
               <span className="flex items-center gap-1 font-medium">
                 <Wand2 size={14} />
-                提示词模板
+                {t("advancedChat.skills.promptTemplate")}
               </span>
               <div className="flex flex-wrap gap-2">
                 {promptTemplates.map((template) => (
@@ -357,11 +335,11 @@ export default function Skills() {
             </div>
 
             <label className="space-y-1 text-sm">
-              <span className="font-medium">提示词</span>
+              <span className="font-medium">{t("advancedChat.skills.prompt")}</span>
               <textarea
                 className="min-h-60 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                 value={prompt}
-                placeholder="输入这个技能的系统提示词，或先从上方模板开始"
+                placeholder={t("advancedChat.skills.promptPlaceholder")}
                 onChange={(event) => setPrompt(event.target.value)}
               />
             </label>
@@ -369,11 +347,11 @@ export default function Skills() {
             <div className="space-y-2 text-sm">
               <span className="flex items-center gap-1 font-medium">
                 <Server size={14} />
-                MCP 服务器
+                {t("advancedChat.skills.mcpServers")}
               </span>
               {mcpServers.length === 0 ? (
                 <div className="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
-                  暂无可用的 MCP 服务器，可在 MCP 页面添加
+                  {t("advancedChat.skills.noMCPServersHint")}
                 </div>
               ) : (
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -406,11 +384,11 @@ export default function Skills() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsEditOpen(false)}>
-              取消
+              {t("common.cancel")}
             </Button>
             <Button className="gap-2" disabled={isSaving} onClick={saveSkill}>
               <Save size={16} />
-              {isSaving ? "保存中" : "保存"}
+              {isSaving ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

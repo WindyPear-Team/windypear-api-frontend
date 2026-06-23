@@ -5,7 +5,7 @@ import { createPortal } from "react-dom"
 import { Link } from "react-router-dom"
 import { Bot, Check, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
 import api from "@/lib/api"
-import { useI18n } from "@/lib/i18n"
+import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -160,8 +160,8 @@ const chatStoreKeys: Record<ChatMode, ChatStoreKeys> = {
 export default function Chat({ variant = "basic" }: ChatProps) {
   const isAdvanced = variant === "advanced"
   const storeKeys = chatStoreKeys[variant]
-  const { language } = useI18n()
-  const copy = language === "zh" ? zhCopy : enCopy
+  const { t } = useI18n()
+  const copy = useMemo(() => buildChatCopy(t), [t])
   const { error } = useToast()
   const [sessions, setSessions] = useState<ChatSession[]>(() => readStoredSessions(storeKeys.sessions, variant === "basic"))
   const [activeSessionID, setActiveSessionID] = useState(() => localStorage.getItem(storeKeys.selectedSession) || "")
@@ -761,7 +761,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
     const next: ChatAttachment[] = []
     for (const file of Array.from(files)) {
-      const validationError = validateAttachment(file, currentAdvancedSettings)
+      const validationError = validateAttachment(file, currentAdvancedSettings, copy)
       if (validationError) {
         error(validationError)
         continue
@@ -1727,7 +1727,7 @@ function parseSSEEvent(raw: string): ParsedSSEEvent | null {
   }
 }
 
-function streamStatusText(payload: any, copy: typeof zhCopy) {
+function streamStatusText(payload: any, copy: ChatCopy) {
   const message = typeof payload?.message === "string" ? payload.message : ""
   if (message === "stream_started") {
     return copy.streamStarted
@@ -1828,14 +1828,14 @@ function normalizeMCPServer(value: unknown): MCPServer {
   }
 }
 
-function validateAttachment(file: File, settings: AdvancedChatSettings) {
+function validateAttachment(file: File, settings: AdvancedChatSettings, copy: ChatCopy) {
   const maxBytes = Math.max(1, Number(settings.attachment_max_mb) || 1) * 1024 * 1024
   if (file.size > maxBytes) {
-    return `附件 ${file.name} 超过 ${settings.attachment_max_mb} MB`
+    return copy.attachmentTooLarge.replace("{file}", file.name).replace("{size}", String(settings.attachment_max_mb))
   }
   const type = (file.type || "application/octet-stream").toLowerCase()
   if (!mimeAllowed(type, settings.attachment_allowed_types)) {
-    return `附件 ${file.name} 类型不允许：${type}`
+    return copy.attachmentTypeBlocked.replace("{file}", file.name).replace("{type}", type)
   }
   return ""
 }
@@ -2038,7 +2038,7 @@ function createID() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function titleFromMessage(content: string, copy: typeof zhCopy) {
+function titleFromMessage(content: string, copy: ChatCopy) {
   const title = content.replace(/\s+/g, " ").trim()
   return title ? title.slice(0, 28) : copy.untitledSession
 }
@@ -2101,7 +2101,7 @@ function stringFromUnknown(value: unknown) {
   return undefined
 }
 
-function toolStatusLabel(status: string, copy: typeof zhCopy) {
+function toolStatusLabel(status: string, copy: ChatCopy) {
   switch (status) {
     case "ok":
       return copy.toolStatusOk
@@ -2133,196 +2133,113 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
 }
 
-const zhCopy = {
-  title: "聊天",
-  sessions: "会话",
-  openSessions: "打开会话",
-  closeSessions: "关闭会话",
-  newSession: "新会话",
-  untitledSession: "新会话",
-  messageCount: "{count} 条消息",
-  deleteSession: "删除会话",
-  config: "配置",
-  advancedConfig: "高级聊天配置",
-  apiKey: "令牌",
-  channel: "渠道",
-  endpoint: "接口",
-  agent: "智能体",
-  noAgentSelected: "未选择智能体",
-  selectAgent: "选择智能体",
-  noAgents: "暂无智能体",
-  manageAgents: "管理智能体",
-  newAgent: "新建智能体",
-  editAgent: "编辑",
-  deleteAgent: "删除",
-  agentName: "智能体名称",
-  defaultAgentName: "默认智能体",
-  agentPrompt: "提示词",
-  agentPromptPlaceholder: "输入这个智能体的系统提示词",
-  agentDefaultModel: "默认模型",
-  saveAgent: "保存智能体",
-  agentSaved: "智能体已保存",
-  agentDeleted: "智能体已删除",
-  agentNameRequired: "请输入智能体名称",
-  agentDefaultModelRequired: "请选择智能体默认模型",
-  agentSaveFailed: "保存智能体失败",
-  agentDeleteFailed: "删除智能体失败",
-  basicSettings: "基础",
-  addedAgent: "会话智能体",
-  noAgentAdded: "这个会话还没有设置智能体",
-  setAgent: "设置",
-  replaceAgent: "替换",
-  skills: "技能",
-  selectSkills: "选择技能",
-  noSkills: "暂无技能",
-  addedSkills: "已添加技能",
-  noSkillsAdded: "这个会话还没有添加技能",
-  manageSkills: "管理技能",
-  mcpServers: "MCP 服务",
-  noMCPServers: "暂无可用 MCP 服务",
-  addedMCPServers: "已添加 MCP 服务",
-  noMCPServersAdded: "这个会话还没有添加 MCP 服务",
-  selectMCPServer: "选择 MCP 服务",
-  manageMCP: "管理 MCP",
-  fromSkill: "来自技能",
-  add: "添加",
-  remove: "移除",
-  sessionModel: "会话模型",
-  done: "完成",
-  chatCompletions: "Chat Completions",
-  responsesAPI: "Responses",
-  claudeMessages: "Claude Messages",
-  geminiGenerate: "Gemini GenerateContent",
-  selectKey: "选择令牌",
-  selectChannel: "选择渠道",
-  noKeys: "没有可用令牌",
-  noChannels: "没有可用渠道",
-  selectModel: "选择模型",
-  conversation: "对话",
-  noMessages: "暂无对话",
-  promptPlaceholder: "输入消息",
-  attachmentMessageTitle: "附件消息",
-  addAttachment: "添加附件",
-  removeAttachment: "移除附件",
-  attachmentLimit: "单个附件不超过 {size} MB；允许类型：{types}",
-  send: "发送",
-  sending: "发送中",
-  editMessage: "编辑消息",
-  deleteMessage: "删除消息",
-  saveMessage: "保存消息",
-  cancelEdit: "取消编辑",
-  keyRequired: "请选择令牌",
-  channelRequired: "请选择渠道",
-  modelRequired: "请选择模型",
-  sendFailed: "发送失败",
-  emptyResponse: "空响应",
-  stopped: "已停止",
-  stop: "停止",
-  streamStarted: "已连接，正在准备...",
-  streamLoadingTools: "正在加载 MCP 工具...",
-  streamModelRound: "正在请求模型（第 {round} 轮）...",
-  streamThinking: "正在思考...",
-  usedTools: "本轮调用工具",
-  toolStatusOk: "成功",
-  toolStatusRunning: "调用中",
-  toolStatusError: "失败",
-  toolStatusMissing: "未找到",
-  toolStatusInvalidArguments: "参数错误",
-}
+const chatCopyKeys = {
+  title: "chat.title",
+  sessions: "chat.sessions",
+  openSessions: "chat.openSessions",
+  closeSessions: "chat.closeSessions",
+  newSession: "chat.newSession",
+  untitledSession: "chat.untitledSession",
+  messageCount: "chat.messageCount",
+  deleteSession: "chat.deleteSession",
+  config: "chat.config",
+  advancedConfig: "chat.advancedConfig",
+  apiKey: "chat.apiKey",
+  channel: "chat.channel",
+  endpoint: "chat.endpoint",
+  agent: "chat.agent",
+  noAgentSelected: "chat.noAgentSelected",
+  selectAgent: "chat.selectAgent",
+  noAgents: "chat.noAgents",
+  manageAgents: "chat.manageAgents",
+  newAgent: "chat.newAgent",
+  editAgent: "chat.editAgent",
+  deleteAgent: "chat.deleteAgent",
+  agentName: "chat.agentName",
+  defaultAgentName: "chat.defaultAgentName",
+  agentPrompt: "chat.agentPrompt",
+  agentPromptPlaceholder: "chat.agentPromptPlaceholder",
+  agentDefaultModel: "chat.agentDefaultModel",
+  saveAgent: "chat.saveAgent",
+  agentSaved: "chat.agentSaved",
+  agentCreated: "chat.agentCreated",
+  agentDeleted: "chat.agentDeleted",
+  agentNameRequired: "chat.agentNameRequired",
+  agentSelectRequired: "chat.agentSelectRequired",
+  agentDefaultModelRequired: "chat.agentDefaultModelRequired",
+  agentSaveFailed: "chat.agentSaveFailed",
+  agentCreateFailed: "chat.agentCreateFailed",
+  agentDeleteFailed: "chat.agentDeleteFailed",
+  basicSettings: "chat.basicSettings",
+  addedAgent: "chat.addedAgent",
+  noAgentAdded: "chat.noAgentAdded",
+  setAgent: "chat.setAgent",
+  replaceAgent: "chat.replaceAgent",
+  skills: "chat.skills",
+  selectSkills: "chat.selectSkills",
+  noSkills: "chat.noSkills",
+  addedSkills: "chat.addedSkills",
+  noSkillsAdded: "chat.noSkillsAdded",
+  manageSkills: "chat.manageSkills",
+  mcpServers: "chat.mcpServers",
+  noMCPServers: "chat.noMCPServers",
+  addedMCPServers: "chat.addedMCPServers",
+  noMCPServersAdded: "chat.noMCPServersAdded",
+  selectMCPServer: "chat.selectMCPServer",
+  manageMCP: "chat.manageMCP",
+  fromSkill: "chat.fromSkill",
+  add: "chat.add",
+  remove: "chat.remove",
+  sessionModel: "chat.sessionModel",
+  done: "chat.done",
+  chatCompletions: "chat.chatCompletions",
+  responsesAPI: "chat.responsesAPI",
+  claudeMessages: "chat.claudeMessages",
+  geminiGenerate: "chat.geminiGenerate",
+  selectKey: "chat.selectKey",
+  selectChannel: "chat.selectChannel",
+  noKeys: "chat.noKeys",
+  noChannels: "chat.noChannels",
+  selectModel: "chat.selectModel",
+  conversation: "chat.conversation",
+  noMessages: "chat.noMessages",
+  promptPlaceholder: "chat.promptPlaceholder",
+  attachmentMessageTitle: "chat.attachmentMessageTitle",
+  addAttachment: "chat.addAttachment",
+  removeAttachment: "chat.removeAttachment",
+  attachmentLimit: "chat.attachmentLimit",
+  attachmentTooLarge: "chat.attachmentTooLarge",
+  attachmentTypeBlocked: "chat.attachmentTypeBlocked",
+  send: "chat.send",
+  sending: "chat.sending",
+  editMessage: "chat.editMessage",
+  deleteMessage: "chat.deleteMessage",
+  saveMessage: "chat.saveMessage",
+  cancelEdit: "chat.cancelEdit",
+  keyRequired: "chat.keyRequired",
+  channelRequired: "chat.channelRequired",
+  modelRequired: "chat.modelRequired",
+  sendFailed: "chat.sendFailed",
+  emptyResponse: "chat.emptyResponse",
+  stopped: "chat.stopped",
+  stop: "chat.stop",
+  streamStarted: "chat.streamStarted",
+  streamLoadingTools: "chat.streamLoadingTools",
+  streamModelRound: "chat.streamModelRound",
+  streamThinking: "chat.streamThinking",
+  usedTools: "chat.usedTools",
+  toolStatusOk: "chat.toolStatusOk",
+  toolStatusRunning: "chat.toolStatusRunning",
+  toolStatusError: "chat.toolStatusError",
+  toolStatusMissing: "chat.toolStatusMissing",
+  toolStatusInvalidArguments: "chat.toolStatusInvalidArguments",
+} as const satisfies Record<string, TranslationKey>
 
-const enCopy: typeof zhCopy = {
-  title: "Chat",
-  sessions: "Sessions",
-  openSessions: "Open sessions",
-  closeSessions: "Close sessions",
-  newSession: "New chat",
-  untitledSession: "New chat",
-  messageCount: "{count} messages",
-  deleteSession: "Delete session",
-  config: "Config",
-  advancedConfig: "Advanced chat config",
-  apiKey: "Token",
-  channel: "Channel",
-  endpoint: "Endpoint",
-  agent: "Agent",
-  noAgentSelected: "No agent",
-  selectAgent: "Select agent",
-  noAgents: "No agents",
-  manageAgents: "Manage agents",
-  newAgent: "New agent",
-  editAgent: "Edit",
-  deleteAgent: "Delete",
-  agentName: "Agent name",
-  defaultAgentName: "Default agent",
-  agentPrompt: "Prompt",
-  agentPromptPlaceholder: "Enter this agent's system prompt",
-  agentDefaultModel: "Default model",
-  saveAgent: "Save agent",
-  agentSaved: "Agent saved",
-  agentDeleted: "Agent deleted",
-  agentNameRequired: "Enter an agent name",
-  agentDefaultModelRequired: "Select a default model for the agent",
-  agentSaveFailed: "Failed to save agent",
-  agentDeleteFailed: "Failed to delete agent",
-  basicSettings: "Basic",
-  addedAgent: "Session agent",
-  noAgentAdded: "No agent set for this session",
-  setAgent: "Set",
-  replaceAgent: "Replace",
-  skills: "Skills",
-  selectSkills: "Select skills",
-  noSkills: "No skills",
-  addedSkills: "Added skills",
-  noSkillsAdded: "No skills added to this session",
-  manageSkills: "Manage skills",
-  mcpServers: "MCP servers",
-  noMCPServers: "No available MCP servers",
-  addedMCPServers: "Added MCP servers",
-  noMCPServersAdded: "No MCP servers added to this session",
-  selectMCPServer: "Select MCP server",
-  manageMCP: "Manage MCP",
-  fromSkill: "From skill",
-  add: "Add",
-  remove: "Remove",
-  sessionModel: "Session model",
-  done: "Done",
-  chatCompletions: "Chat Completions",
-  responsesAPI: "Responses",
-  claudeMessages: "Claude Messages",
-  geminiGenerate: "Gemini GenerateContent",
-  selectKey: "Select token",
-  selectChannel: "Select channel",
-  noKeys: "No available tokens",
-  noChannels: "No available channels",
-  selectModel: "Select model",
-  conversation: "Conversation",
-  noMessages: "No messages",
-  promptPlaceholder: "Enter message",
-  attachmentMessageTitle: "Attachment message",
-  addAttachment: "Add attachment",
-  removeAttachment: "Remove attachment",
-  attachmentLimit: "Each attachment up to {size} MB; allowed types: {types}",
-  send: "Send",
-  sending: "Sending",
-  editMessage: "Edit message",
-  deleteMessage: "Delete message",
-  saveMessage: "Save message",
-  cancelEdit: "Cancel edit",
-  keyRequired: "Select a token first",
-  channelRequired: "Select a channel first",
-  modelRequired: "Select a model",
-  sendFailed: "Send failed",
-  emptyResponse: "Empty response",
-  stopped: "Stopped",
-  stop: "Stop",
-  streamStarted: "Connected, preparing...",
-  streamLoadingTools: "Loading MCP tools...",
-  streamModelRound: "Calling model (round {round})...",
-  streamThinking: "Thinking...",
-  usedTools: "Tools used in this turn",
-  toolStatusOk: "OK",
-  toolStatusRunning: "Running",
-  toolStatusError: "Error",
-  toolStatusMissing: "Missing",
-  toolStatusInvalidArguments: "Bad args",
+type ChatCopy = Record<keyof typeof chatCopyKeys, string>
+type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string
+
+function buildChatCopy(t: Translate): ChatCopy {
+  return Object.fromEntries(
+    Object.entries(chatCopyKeys).map(([name, key]) => [name, t(key)])
+  ) as ChatCopy
 }

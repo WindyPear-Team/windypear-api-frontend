@@ -24,6 +24,7 @@ interface CurrentUser {
 
 export default function AdvancedChat() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { t } = useI18n()
   const { data: settings } = useQuery<PublicSettings>({
     queryKey: ["public-settings"],
     queryFn: async () => {
@@ -50,7 +51,7 @@ export default function AdvancedChat() {
             variant="outline"
             size="icon"
             onClick={() => setIsSidebarOpen((open) => !open)}
-            aria-label={isSidebarOpen ? "Close menu" : "Open menu"}
+            aria-label={isSidebarOpen ? t("advancedChat.closeMenu") : t("advancedChat.openMenu")}
             aria-expanded={isSidebarOpen}
           >
             <Menu size={18} />
@@ -82,7 +83,7 @@ export default function AdvancedChat() {
             <button
               type="button"
               className="absolute inset-0 bg-black/50"
-              aria-label="Close menu"
+              aria-label={t("advancedChat.closeMenu")}
               onClick={() => setIsSidebarOpen(false)}
             />
             <div className="relative z-50 h-full w-72 max-w-[85vw]">
@@ -128,7 +129,7 @@ function AdvancedChatSidebar({ className, onNavigate }: { className?: string; on
     { href: "/chat/images", label: t("nav.images"), icon: Palette, active: location.pathname === "/chat/images" },
     { href: "/chat/agents", label: t("nav.agents"), icon: Bot, active: location.pathname === "/chat/agents" },
     { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" },
-    { href: "/chat/mcp", label: "MCP", icon: Bot, active: location.pathname === "/chat/mcp" },
+    { href: "/chat/mcp", label: t("nav.mcp"), icon: Bot, active: location.pathname === "/chat/mcp" },
   ]
 
   return (
@@ -159,7 +160,8 @@ function AdvancedChatSidebar({ className, onNavigate }: { className?: string; on
 }
 
 function UserAvatar({ user }: { user?: CurrentUser }) {
-  const label = user?.username || user?.email || "User"
+  const { t } = useI18n()
+  const label = user?.username || user?.email || t("common.user")
   const initials = avatarInitials(label)
   return (
     <Link

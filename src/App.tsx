@@ -34,7 +34,7 @@ import { isAdvancedChatEnabled, withPublicSettingsDefaults } from "./lib/public-
 
 const queryClient = new QueryClient()
 
-type Language = "zh" | "en"
+type Language = "zh" | "en" | "ja"
 
 type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string
 
@@ -192,17 +192,27 @@ const DocumentTitle = () => {
 
 function pageTitleForPath(pathname: string, language: Language, t: Translate) {
   const normalizedPathname = pathname.replace(/\/+$/, "") || "/"
-  const publicTitles =
-    language === "zh"
+  const publicTitles = language === "zh"
+    ? {
+        "/": "首页",
+        "/setup": "初始化站点",
+        "/login": "登录",
+        "/models": "模型列表",
+        "/status": "状态监测",
+        "/about": "关于",
+        "/privacy": "隐私政策",
+        "/terms": "用户协议",
+      }
+    : language === "ja"
       ? {
-          "/": "首页",
-          "/setup": "初始化站点",
-          "/login": "登录",
-          "/models": "模型列表",
-          "/status": "状态监测",
-          "/about": "关于",
-          "/privacy": "隐私政策",
-          "/terms": "用户协议",
+          "/": "ホーム",
+          "/setup": "初期設定",
+          "/login": "サインイン",
+          "/models": "モデル",
+          "/status": "ステータス",
+          "/about": "概要",
+          "/privacy": "プライバシーポリシー",
+          "/terms": "利用規約",
         }
       : {
           "/": "Home",
@@ -247,10 +257,10 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
     return t("models.title")
   }
   if (normalizedPathname === "/dashboard/logs") {
-    return language === "zh" ? "明细" : "Details"
+    return language === "zh" ? "明细" : language === "ja" ? "明細" : "Details"
   }
   if (normalizedPathname === "/dashboard/wallet") {
-    return language === "zh" ? "钱包" : "Wallet"
+    return language === "zh" ? "钱包" : language === "ja" ? "ウォレット" : "Wallet"
   }
   if (normalizedPathname === "/dashboard/api-keys") {
     return t("settings.apiKeys")
@@ -259,7 +269,7 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
     return t("nav.chat")
   }
   if (normalizedPathname === "/chat/images") {
-    return language === "zh" ? "AI 绘画" : "AI Images"
+    return language === "zh" ? "AI 绘画" : language === "ja" ? "AI画像" : "AI Images"
   }
   if (normalizedPathname === "/chat/agents") {
     return t("nav.agents")
@@ -271,7 +281,7 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
     return t("nav.chat")
   }
   if (normalizedPathname === "/dashboard/images") {
-    return language === "zh" ? "AI 绘画" : "AI Images"
+    return language === "zh" ? "AI 绘画" : language === "ja" ? "AI画像" : "AI Images"
   }
   if (normalizedPathname === "/dashboard/settings") {
     return t("settings.title")
