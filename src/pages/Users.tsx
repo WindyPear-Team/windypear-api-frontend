@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import { PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { useToast } from "@/components/ui/toast"
 
 interface Group {
@@ -110,6 +111,7 @@ export default function Users() {
         <h1 className="text-3xl font-bold">{t("users.title")}</h1>
       </div>
 
+      <PageTitleSlot />
       <div className="border rounded-md">
         <Table>
           <TableHeader>

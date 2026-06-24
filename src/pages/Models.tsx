@@ -6,6 +6,7 @@ import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import {
   Dialog,
   DialogContent,
@@ -307,6 +308,7 @@ export default function Models() {
         </div>
       </div>
 
+      <PageTitleSlot />
       <Card>
         <CardHeader>
           <CardTitle>{copy.priceSync}</CardTitle>

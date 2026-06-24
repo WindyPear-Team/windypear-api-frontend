@@ -2,6 +2,7 @@ import { Activity, BarChart3, Database, DollarSign, LineChart, PieChart, Users }
 import type { LucideIcon } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -79,6 +80,7 @@ export default function AdminOverview() {
         <div className="mt-2 text-sm text-muted-foreground">{copy.subtitle}</div>
       </div>
 
+      <PageTitleSlot />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {platformCards(copy, stats, logs).map((card) => (
           <Card key={card.title}>

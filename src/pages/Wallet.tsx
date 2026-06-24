@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
 
@@ -170,6 +171,7 @@ export default function Wallet() {
         <div className="mt-2 text-sm text-muted-foreground">{copy.subtitle}</div>
       </div>
 
+      <PageTitleSlot />
       <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
         <Card>
           <CardHeader>

@@ -1,11 +1,15 @@
 import { Sidebar } from "./Sidebar"
 import { PageTransition } from "./PageTransition"
-import { Menu, UserCircle } from "lucide-react"
-import { Link, Outlet } from "react-router-dom"
+import { Menu, SlidersHorizontal, UserCircle } from "lucide-react"
+import { Link, Outlet, useLocation } from "react-router-dom"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
+import { PageComponentSlots } from "@/components/layout/PageComponentSlots"
+import { PageLayoutEditBar, PageLayoutEditorProvider } from "@/components/layout/PageLayoutEditor"
 import api from "@/lib/api"
+import { useI18n } from "@/lib/i18n"
+import { pageKeyFromPathname } from "@/lib/page-layouts"
 import type { PublicSettings } from "@/lib/public-settings"
 import { parseTopNavItems, withPublicSettingsDefaults } from "@/lib/public-settings"
 
@@ -13,10 +17,14 @@ interface CurrentUser {
   username?: string
   email?: string
   avatar_url?: string
+  is_admin?: boolean
 }
 
 export function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isLayoutEditing, setIsLayoutEditing] = useState(false)
+  const { language } = useI18n()
+  const location = useLocation()
   const { data: settings } = useQuery<PublicSettings>({
     queryKey: ["public-settings"],
     queryFn: async () => {
@@ -33,8 +41,16 @@ export function Layout() {
   })
   const publicSettings = withPublicSettingsDefaults(settings)
   const topNavItems = parseTopNavItems(publicSettings.top_nav_items)
+  const currentPageKey = pageKeyFromPathname(location.pathname)
+  const layoutEditorLabel = language === "zh" ? (isLayoutEditing ? "退出编辑" : "可视化编辑") : isLayoutEditing ? "Exit editing" : "Visual editing"
 
   return (
+    <PageLayoutEditorProvider
+      currentPageKey={currentPageKey}
+      isEditing={isLayoutEditing}
+      pageLayoutsRaw={publicSettings.page_layouts}
+      onEditingChange={setIsLayoutEditing}
+    >
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
@@ -58,9 +74,22 @@ export function Layout() {
               ))}
             </div>
           )}
+          {user?.is_admin && (
+            <Button
+              variant={isLayoutEditing ? "default" : "outline"}
+              size="icon"
+              title={layoutEditorLabel}
+              aria-label={layoutEditorLabel}
+              disabled={!settings}
+              onClick={() => setIsLayoutEditing((editing) => !editing)}
+            >
+              <SlidersHorizontal size={18} />
+            </Button>
+          )}
           <UserAvatar user={user} />
         </div>
       </header>
+      {user?.is_admin && <PageLayoutEditBar />}
 
       <div className="flex min-h-0 flex-1">
         <div className="hidden lg:block lg:h-full lg:shrink-0">
@@ -89,7 +118,10 @@ export function Layout() {
           )}
           <div className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 lg:p-8">
             <PageTransition>
-              <Outlet />
+              <div className="space-y-6">
+                <Outlet />
+                <PageComponentSlots pageKey={currentPageKey} slotKey="after" />
+              </div>
             </PageTransition>
           </div>
           {publicSettings.footer_text && (
@@ -100,6 +132,7 @@ export function Layout() {
         </main>
       </div>
     </div>
+    </PageLayoutEditorProvider>
   )
 }
 

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { TabTransition } from "@/components/layout/TabTransition"
 import {
   Table,
@@ -129,6 +130,7 @@ export default function Logs() {
         <div className="mt-2 text-sm text-muted-foreground">{copy.subtitle}</div>
       </div>
 
+      <PageTitleSlot />
       <div className="flex gap-2 overflow-x-auto border-b pb-2">
         <Button variant={activeTab === "calls" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("calls")}>
           {copy.callRecords}

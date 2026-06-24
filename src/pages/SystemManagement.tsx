@@ -28,6 +28,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { TabTransition } from "@/components/layout/TabTransition"
 import { useToast } from "@/components/ui/toast"
 import {
@@ -773,6 +774,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         )}
       </div>
 
+      <PageTitleSlot />
       <div className="flex gap-2 overflow-x-auto border-b pb-2">
         {visibleTabs.map((tab) => (
           <Button

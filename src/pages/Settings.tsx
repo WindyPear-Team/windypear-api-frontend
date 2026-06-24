@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
 import { passkeyCredentialToJSON, passkeySupported, preparePasskeyCreationOptions } from "@/lib/passkey"
@@ -184,6 +185,7 @@ export default function Settings() {
         </Button>
       </div>
 
+      <PageTitleSlot />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>

@@ -9,6 +9,7 @@ import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 
@@ -910,6 +911,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         </div>
       </div>
 
+      <PageTitleSlot />
       <div className="space-y-4">
         {!isAdvanced && basicConfig}
 

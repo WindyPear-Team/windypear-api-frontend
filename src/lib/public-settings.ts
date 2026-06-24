@@ -15,6 +15,7 @@ export interface PublicSettings {
   announcement: string
   top_nav_enabled: boolean
   top_nav_items: string
+  page_layouts: string
   sidebar_dashboard_enabled: boolean
   sidebar_usage_enabled: boolean
   sidebar_wallet_enabled: boolean
@@ -70,6 +71,7 @@ export const defaultPublicSettings: PublicSettings = {
   announcement: "",
   top_nav_enabled: false,
   top_nav_items: "",
+  page_layouts: "{}",
   sidebar_dashboard_enabled: true,
   sidebar_usage_enabled: true,
   sidebar_wallet_enabled: true,

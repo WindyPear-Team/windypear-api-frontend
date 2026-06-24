@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
@@ -145,6 +146,7 @@ export default function DataBoard() {
         <div className="mt-2 text-sm text-muted-foreground">{t("dataBoard.subtitle")}</div>
       </div>
 
+      <PageTitleSlot />
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{copy.advancedFilters}</CardTitle>
