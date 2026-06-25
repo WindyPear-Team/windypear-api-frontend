@@ -58,6 +58,8 @@ interface ChatSession {
   mcp_server_ids: string[]
   connector_device_id?: string
   connector_workspace_path?: string
+  connector_auto_approve: boolean
+  connector_command_prefixes: string[]
   model_name?: string
   user_channel_id?: number
   created_at: string
@@ -232,6 +234,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [pendingMCPServerID, setPendingMCPServerID] = useState("")
   const [pendingConnectorDeviceID, setPendingConnectorDeviceID] = useState("")
   const [pendingConnectorWorkspace, setPendingConnectorWorkspace] = useState("")
+  const [pendingConnectorAutoApprove, setPendingConnectorAutoApprove] = useState(false)
+  const [pendingConnectorCommandPrefixes, setPendingConnectorCommandPrefixes] = useState("")
   const [decidingConnectorTaskID, setDecidingConnectorTaskID] = useState("")
   const [prompt, setPrompt] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
@@ -702,7 +706,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }), { persist: true })
   }
 
-  const setSessionConnector = (deviceID: string, workspacePath: string) => {
+  const setSessionConnector = (deviceID: string, workspacePath: string, autoApprove: boolean, commandPrefixes: string[]) => {
     if (!currentSession) {
       return
     }
@@ -710,6 +714,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       ...session,
       connector_device_id: deviceID || undefined,
       connector_workspace_path: workspacePath || undefined,
+      connector_auto_approve: autoApprove,
+      connector_command_prefixes: uniqueStrings(commandPrefixes),
     }), { persist: true })
   }
 
@@ -721,6 +727,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       ...session,
       connector_device_id: undefined,
       connector_workspace_path: undefined,
+      connector_auto_approve: false,
+      connector_command_prefixes: [],
     }), { persist: true })
   }
 
@@ -745,6 +753,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (tab === "device") {
       setPendingConnectorDeviceID(currentSession?.connector_device_id || connectorDevices[0]?.id || "")
       setPendingConnectorWorkspace(currentSession?.connector_workspace_path || "")
+      setPendingConnectorAutoApprove(Boolean(currentSession?.connector_auto_approve))
+      setPendingConnectorCommandPrefixes((currentSession?.connector_command_prefixes || []).join("\n"))
     }
     setConfigTab(tab)
     setIsConfigOpen(true)
@@ -818,6 +828,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               mcp_server_ids: session.mcp_server_ids,
               connector_device_id: session.connector_device_id || "",
               connector_workspace_path: session.connector_workspace_path || "",
+              connector_auto_approve: session.connector_auto_approve,
+              connector_command_prefixes: session.connector_command_prefixes,
               stream: false,
             })
             const serverSession = normalizeSession(res.data?.session)
@@ -865,6 +877,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               mcp_server_ids: session.mcp_server_ids,
               connector_device_id: session.connector_device_id || "",
               connector_workspace_path: session.connector_workspace_path || "",
+              connector_auto_approve: session.connector_auto_approve,
+              connector_command_prefixes: session.connector_command_prefixes,
               stream: true,
             }),
             signal: controller.signal,
@@ -1721,13 +1735,40 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       <Button
                         className="w-full gap-2"
                         disabled={!pendingConnectorDeviceID || !pendingConnectorWorkspace.trim()}
-                        onClick={() => setSessionConnector(pendingConnectorDeviceID, pendingConnectorWorkspace.trim())}
+                        onClick={() => setSessionConnector(
+                          pendingConnectorDeviceID,
+                          pendingConnectorWorkspace.trim(),
+                          pendingConnectorAutoApprove,
+                          commandPrefixesFromText(pendingConnectorCommandPrefixes)
+                        )}
                       >
                         <Check size={16} />
                         {copy.setDevice}
                       </Button>
                     </div>
                   </div>
+                  <label className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={pendingConnectorAutoApprove}
+                      onChange={(event) => setPendingConnectorAutoApprove(event.target.checked)}
+                    />
+                    <span>
+                      <span className="block font-medium">{copy.connectorAutoApprove}</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">{copy.connectorAutoApproveHint}</span>
+                    </span>
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">{copy.connectorCommandPrefixes}</span>
+                    <textarea
+                      className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      value={pendingConnectorCommandPrefixes}
+                      placeholder={copy.connectorCommandPrefixesPlaceholder}
+                      onChange={(event) => setPendingConnectorCommandPrefixes(event.target.value)}
+                    />
+                    <span className="block text-xs text-muted-foreground">{copy.connectorCommandPrefixesHint}</span>
+                  </label>
                 </div>
               )}
             </div>
@@ -1833,26 +1874,44 @@ function ToolCallRounds({ toolCalls, copy }: { toolCalls: ChatToolCall[]; copy: 
           </div>
           <div className="space-y-2">
             {group.calls.map((toolCall) => (
-              <div key={toolCall.id} className="rounded-md border bg-background p-2">
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <Server size={13} className="shrink-0" />
-                  <span className="min-w-0 truncate font-medium">
-                    {toolCall.server ? `${toolCall.server}: ` : ""}{toolCall.tool || toolCall.name}
-                  </span>
-                  <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
-                    {toolStatusLabel(toolCall.status, copy)}
-                  </span>
-                </div>
-                <div className="mt-2 text-[11px] font-medium text-muted-foreground">{copy.toolArguments}</div>
-                <pre className="mt-1 max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
-                  {formatToolArguments(toolCall.arguments)}
-                </pre>
-              </div>
+              <ToolCallDetails key={toolCall.id} toolCall={toolCall} copy={copy} />
             ))}
           </div>
         </div>
       ))}
     </div>
+  )
+}
+
+function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: ChatCopy }) {
+  const shouldAutoOpen = toolCall.status === "running" || toolCall.status === "approval_required"
+  const [open, setOpen] = useState(shouldAutoOpen)
+
+  useEffect(() => {
+    setOpen(shouldAutoOpen)
+  }, [shouldAutoOpen, toolCall.id])
+
+  return (
+    <details
+      className="rounded-md border bg-background p-2"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-xs [&::-webkit-details-marker]:hidden">
+        <Server size={13} className="shrink-0" />
+        <span className="min-w-0 truncate font-medium">
+          {toolCall.server ? `${toolCall.server}: ` : ""}{toolCall.tool || toolCall.name}
+        </span>
+        <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
+          {toolStatusLabel(toolCall.status, copy)}
+        </span>
+        {!open && <span className="ml-auto text-[11px] text-muted-foreground">{copy.expandToolCall}</span>}
+      </summary>
+      <div className="mt-2 text-[11px] font-medium text-muted-foreground">{copy.toolArguments}</div>
+      <pre className="mt-1 max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
+        {formatToolArguments(toolCall.arguments)}
+      </pre>
+    </details>
   )
 }
 
@@ -2130,7 +2189,18 @@ function readStoredSessions(storeKey = sessionsStoreKey, includeLegacy = true): 
   const legacyMessages = includeLegacy ? readLegacyMessages() : []
   if (legacyMessages.length > 0) {
     const now = new Date().toISOString()
-    return [{ id: createID(), title: "", messages: legacyMessages, run_mode: "chat", skill_ids: [], mcp_server_ids: [], created_at: now, updated_at: now }]
+    return [{
+      id: createID(),
+      title: "",
+      messages: legacyMessages,
+      run_mode: "chat",
+      skill_ids: [],
+      mcp_server_ids: [],
+      connector_auto_approve: false,
+      connector_command_prefixes: [],
+      created_at: now,
+      updated_at: now,
+    }]
   }
   return []
 }
@@ -2249,6 +2319,8 @@ async function saveAdvancedSessionSnapshot(session: ChatSession): Promise<ChatSe
     mcp_server_ids: session.mcp_server_ids,
     connector_device_id: session.connector_device_id || "",
     connector_workspace_path: session.connector_workspace_path || "",
+    connector_auto_approve: session.connector_auto_approve,
+    connector_command_prefixes: session.connector_command_prefixes,
     model_name: session.model_name || "",
     user_channel_id: session.user_channel_id || 0,
     messages: session.messages.map((message) => ({
@@ -2514,6 +2586,8 @@ function normalizeSession(value: unknown): ChatSession | null {
     mcp_server_ids: stringArrayFromUnknown(value.mcp_server_ids),
     connector_device_id: stringFromUnknown(value.connector_device_id) || undefined,
     connector_workspace_path: stringFromUnknown(value.connector_workspace_path) || undefined,
+    connector_auto_approve: value.connector_auto_approve === true,
+    connector_command_prefixes: stringArrayFromUnknown(value.connector_command_prefixes),
     model_name: stringFromUnknown(value.model_name),
     user_channel_id: Number(value.user_channel_id || 0) || undefined,
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
@@ -2588,8 +2662,9 @@ function normalizeToolCalls(value: unknown): ChatToolCall[] {
       return
     }
     const round = typeof item.round === "number" && Number.isFinite(item.round) && item.round > 0 ? item.round : undefined
+    const id = typeof item.id === "string" && item.id ? item.id : `${round || 0}-${server}-${name || tool}-${index}`
     calls.push({
-      id: `${round || 0}-${server}-${name || tool}-${index}`,
+      id,
       round,
       name: name || tool,
       server,
@@ -2605,7 +2680,7 @@ function mergeToolCalls(current: ChatToolCall[], incoming: ChatToolCall[]) {
   const merged = [...current]
   for (const next of incoming) {
     const index = merged.findIndex(
-      (item) => item.round === next.round && item.name === next.name && item.server === next.server && item.tool === next.tool
+      (item) => item.id === next.id
     )
     if (index >= 0) {
       merged[index] = { ...merged[index], ...next }
@@ -2665,6 +2740,8 @@ function createSession(input: { agentID?: string; modelName?: string } = {}): Ch
     mcp_server_ids: [],
     connector_device_id: undefined,
     connector_workspace_path: undefined,
+    connector_auto_approve: false,
+    connector_command_prefixes: [],
     model_name: input.modelName || undefined,
     created_at: now,
     updated_at: now,
@@ -2780,6 +2857,10 @@ function uniqueStrings(values: string[]) {
 
 function stringArrayFromUnknown(value: unknown) {
   return Array.isArray(value) ? uniqueStrings(value.map(stringFromUnknown).filter((item): item is string => Boolean(item))) : []
+}
+
+function commandPrefixesFromText(value: string) {
+  return uniqueStrings(value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))
 }
 
 function stringFromUnknown(value: unknown) {
@@ -2934,6 +3015,11 @@ const chatCopyKeys = {
   connectorApprovalFailed: "chat.connectorApprovalFailed",
   approveConnectorTask: "chat.approveConnectorTask",
   rejectConnectorTask: "chat.rejectConnectorTask",
+  connectorAutoApprove: "chat.connectorAutoApprove",
+  connectorAutoApproveHint: "chat.connectorAutoApproveHint",
+  connectorCommandPrefixes: "chat.connectorCommandPrefixes",
+  connectorCommandPrefixesPlaceholder: "chat.connectorCommandPrefixesPlaceholder",
+  connectorCommandPrefixesHint: "chat.connectorCommandPrefixesHint",
   localDevice: "chat.localDevice",
   noDeviceSelected: "chat.noDeviceSelected",
   selectDevice: "chat.selectDevice",
@@ -2995,6 +3081,7 @@ const chatCopyKeys = {
   usedTools: "chat.usedTools",
   toolRound: "chat.toolRound",
   toolArguments: "chat.toolArguments",
+  expandToolCall: "chat.expandToolCall",
   toolStatusOk: "chat.toolStatusOk",
   toolStatusRunning: "chat.toolStatusRunning",
   toolStatusApprovalRequired: "chat.toolStatusApprovalRequired",
