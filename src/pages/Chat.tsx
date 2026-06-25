@@ -35,6 +35,7 @@ interface ChatToolCall {
   server?: string
   tool?: string
   status: string
+  arguments?: Record<string, unknown>
 }
 
 interface ChatMessage {
@@ -120,6 +121,17 @@ interface ConnectorDevice {
   last_seen_at?: string
 }
 
+interface ConnectorApprovalTask {
+  id: string
+  device_id: string
+  device_name: string
+  run_id: string
+  action: string
+  workspace_path: string
+  payload: Record<string, unknown>
+  created_at: string
+}
+
 interface AdvancedChatSettings {
   attachment_max_mb: number
   attachment_allowed_types: string[]
@@ -170,6 +182,7 @@ const agentsQueryKey = ["advanced-chat-agents"] as const
 const skillsQueryKey = ["advanced-chat-skills"] as const
 const advancedSessionsQueryKey = ["advanced-chat-sessions"] as const
 const connectorDevicesQueryKey = ["advanced-chat-connector-devices"] as const
+const connectorApprovalsQueryKey = (runID: string) => ["advanced-chat-connector-approvals", runID] as const
 const defaultAdvancedChatSettings: AdvancedChatSettings = {
   attachment_max_mb: 10,
   attachment_allowed_types: ["text/plain", "text/markdown", "application/json", "text/csv", "image/png", "image/jpeg", "application/pdf"],
@@ -219,6 +232,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [pendingMCPServerID, setPendingMCPServerID] = useState("")
   const [pendingConnectorDeviceID, setPendingConnectorDeviceID] = useState("")
   const [pendingConnectorWorkspace, setPendingConnectorWorkspace] = useState("")
+  const [decidingConnectorTaskID, setDecidingConnectorTaskID] = useState("")
   const [prompt, setPrompt] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isSending, setIsSending] = useState(false)
@@ -329,6 +343,21 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const activeRunMode: ChatRunMode = isAdvanced ? currentSession?.run_mode || "chat" : "chat"
   const activeRun = isAdvanced ? currentSession?.latest_run : undefined
   const isActiveRunRunning = isRunActive(activeRun)
+  const activeRunID = activeRun?.id || ""
+  const {
+    data: pendingConnectorApprovals = [],
+    refetch: refetchConnectorApprovals,
+  } = useQuery<ConnectorApprovalTask[]>({
+    queryKey: connectorApprovalsQueryKey(activeRunID),
+    enabled: isAdvanced && Boolean(activeRunID) && isActiveRunRunning,
+    refetchInterval: 1000,
+    queryFn: async () => {
+      const res = await api.get(`/user/advanced-chat/runs/${encodeURIComponent(activeRunID)}/connector-tasks/pending`)
+      return Array.isArray(res.data)
+        ? res.data.map(normalizeConnectorApprovalTask).filter((task): task is ConnectorApprovalTask => Boolean(task))
+        : []
+    },
+  })
   const activeModelName = isAdvanced ? currentSession?.model_name || selectedAgent?.default_model || modelName : modelName
   const selectableUserChannels = useMemo(
     () => catalog.filter((channel) => !activeModelName || channel.models.includes(activeModelName)),
@@ -695,6 +724,23 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }), { persist: true })
   }
 
+  const decideConnectorApproval = async (taskID: string, approved: boolean) => {
+    if (!taskID || decidingConnectorTaskID) {
+      return
+    }
+    setDecidingConnectorTaskID(taskID)
+    try {
+      await api.post(`/user/advanced-chat/connector-tasks/${encodeURIComponent(taskID)}/decision`, { approved })
+      await refetchConnectorApprovals()
+      void refetchAdvancedSessions()
+    } catch (err) {
+      await refetchConnectorApprovals()
+      error(apiErrorMessage(err, copy.connectorApprovalFailed))
+    } finally {
+      setDecidingConnectorTaskID("")
+    }
+  }
+
   const openAdvancedConfig = (tab: SessionConfigTab = configTab) => {
     if (tab === "device") {
       setPendingConnectorDeviceID(currentSession?.connector_device_id || connectorDevices[0]?.id || "")
@@ -880,7 +926,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 ...current,
                 messages: current.messages.map((message) =>
                   message.id === assistantMessageID
-                    ? { ...message, content: finalContent || copy.emptyResponse, tool_calls: finalToolCalls }
+                    ? { ...message, content: finalContent, tool_calls: finalToolCalls }
                     : message
                 ),
               }))
@@ -1249,26 +1295,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                               />
                             ) : (
                               <>
+                                {isAdvanced && message.id === activeRun?.assistant_message_id && pendingConnectorApprovals.length > 0 && (
+                                  <ConnectorApprovalPanel
+                                    tasks={pendingConnectorApprovals}
+                                    copy={copy}
+                                    decidingTaskID={decidingConnectorTaskID}
+                                    onDecide={decideConnectorApproval}
+                                  />
+                                )}
                                 {message.tool_calls && message.tool_calls.length > 0 && (
-                                  <div className="mb-2 flex flex-wrap gap-1.5">
-                                    {message.tool_calls.map((toolCall) => (
-                                      <span
-                                        key={toolCall.id}
-                                        className={cn(
-                                          "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-[11px]",
-                                          toolCall.status === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"
-                                        )}
-                                        title={[toolCall.server, toolCall.tool].filter(Boolean).join(" / ") || toolCall.name}
-                                      >
-                                        {typeof toolCall.round === "number" && (
-                                          <span className="shrink-0 rounded bg-background/70 px-1 text-[10px] opacity-80">R{toolCall.round}</span>
-                                        )}
-                                        <Server size={11} className="shrink-0" />
-                                        <span className="truncate">{toolCall.server ? `${toolCall.server}: ` : ""}{toolCall.tool || toolCall.name}</span>
-                                        <span className="shrink-0 opacity-70">{toolStatusLabel(toolCall.status, copy)}</span>
-                                      </span>
-                                    ))}
-                                  </div>
+                                  <ToolCallRounds toolCalls={message.tool_calls} copy={copy} />
                                 )}
                                 <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
                               </>
@@ -1722,6 +1758,100 @@ function MarkdownContent({ content }: { content: string }) {
   return (
     <div className="space-y-2 break-words leading-relaxed">
       {blocks.map((block, index) => renderMarkdownBlock(block, index))}
+    </div>
+  )
+}
+
+function ConnectorApprovalPanel({
+  tasks,
+  copy,
+  decidingTaskID,
+  onDecide,
+}: {
+  tasks: ConnectorApprovalTask[]
+  copy: ChatCopy
+  decidingTaskID: string
+  onDecide: (taskID: string, approved: boolean) => void
+}) {
+  return (
+    <div className="mb-2 space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3">
+      <div>
+        <div className="text-sm font-medium text-amber-900">{copy.connectorApprovalTitle}</div>
+        <div className="mt-1 text-xs text-amber-800">{copy.connectorApprovalDescription}</div>
+      </div>
+      {tasks.map((task) => (
+        <div key={task.id} className="rounded-md border bg-background p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                <Server size={14} />
+                <span>{task.device_name || task.device_id}</span>
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{task.action}</span>
+              </div>
+              <div className="break-all text-xs text-muted-foreground">{task.workspace_path}</div>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={Boolean(decidingTaskID)}
+                onClick={() => onDecide(task.id, false)}
+              >
+                <X size={14} />
+                {copy.rejectConnectorTask}
+              </Button>
+              <Button
+                size="sm"
+                disabled={Boolean(decidingTaskID)}
+                onClick={() => onDecide(task.id, true)}
+              >
+                <Check size={14} />
+                {copy.approveConnectorTask}
+              </Button>
+            </div>
+          </div>
+          <pre className="mt-3 max-h-48 overflow-auto rounded-md bg-muted p-2 text-xs">
+            {formatToolArguments(task.payload)}
+          </pre>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ToolCallRounds({ toolCalls, copy }: { toolCalls: ChatToolCall[]; copy: ChatCopy }) {
+  const groups = groupToolCallsByRound(toolCalls)
+  if (groups.length === 0) {
+    return null
+  }
+  return (
+    <div className="mb-2 space-y-2">
+      {groups.map((group) => (
+        <div key={group.key} className="rounded-md border bg-muted/30 p-2">
+          <div className="mb-2 text-xs font-medium text-muted-foreground">
+            {copy.toolRound.replace("{round}", group.label)}
+          </div>
+          <div className="space-y-2">
+            {group.calls.map((toolCall) => (
+              <div key={toolCall.id} className="rounded-md border bg-background p-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <Server size={13} className="shrink-0" />
+                  <span className="min-w-0 truncate font-medium">
+                    {toolCall.server ? `${toolCall.server}: ` : ""}{toolCall.tool || toolCall.name}
+                  </span>
+                  <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
+                    {toolStatusLabel(toolCall.status, copy)}
+                  </span>
+                </div>
+                <div className="mt-2 text-[11px] font-medium text-muted-foreground">{copy.toolArguments}</div>
+                <pre className="mt-1 max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
+                  {formatToolArguments(toolCall.arguments)}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -2277,6 +2407,27 @@ function normalizeConnectorDevice(value: unknown): ConnectorDevice | null {
   }
 }
 
+function normalizeConnectorApprovalTask(value: unknown): ConnectorApprovalTask | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  const id = stringFromUnknown(value.id)
+  if (!id) {
+    return null
+  }
+  const payload = isRecord(value.payload) ? value.payload : {}
+  return {
+    id,
+    device_id: stringFromUnknown(value.device_id) || "",
+    device_name: stringFromUnknown(value.device_name) || "",
+    run_id: stringFromUnknown(value.run_id) || "",
+    action: stringFromUnknown(value.action) || "",
+    workspace_path: stringFromUnknown(value.workspace_path) || "",
+    payload,
+    created_at: stringFromUnknown(value.created_at) || new Date().toISOString(),
+  }
+}
+
 function validateAttachment(file: File, settings: AdvancedChatSettings, copy: ChatCopy) {
   const maxBytes = Math.max(1, Number(settings.attachment_max_mb) || 1) * 1024 * 1024
   if (file.size > maxBytes) {
@@ -2444,6 +2595,7 @@ function normalizeToolCalls(value: unknown): ChatToolCall[] {
       server,
       tool,
       status: typeof item.status === "string" && item.status ? item.status : "ok",
+      arguments: isRecord(item.arguments) ? item.arguments : undefined,
     })
   })
   return calls
@@ -2557,6 +2709,9 @@ function messageDisplayContent(message: ChatMessage, run: ChatRun | undefined, c
   if (run?.status === "failed" && run.assistant_message_id === message.id) {
     return run.error_message || copy.sendFailed
   }
+  if (message.role === "assistant" && (message.tool_calls || []).length > 0) {
+    return ""
+  }
   if (message.role === "assistant") {
     return copy.emptyResponse
   }
@@ -2637,12 +2792,52 @@ function stringFromUnknown(value: unknown) {
   return undefined
 }
 
+function groupToolCallsByRound(toolCalls: ChatToolCall[]) {
+  const groups = new Map<string, { key: string; label: string; calls: ChatToolCall[] }>()
+  toolCalls.forEach((call, index) => {
+    const label = typeof call.round === "number" ? String(call.round) : String(index + 1)
+    const key = typeof call.round === "number" ? `round-${call.round}` : `tool-${index}`
+    const group = groups.get(key) || { key, label, calls: [] }
+    group.calls.push(call)
+    groups.set(key, group)
+  })
+  return Array.from(groups.values())
+}
+
+function formatToolArguments(value?: Record<string, unknown>) {
+  if (!value || Object.keys(value).length === 0) {
+    return "{}"
+  }
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function toolStatusClassName(status: string) {
+  switch (status) {
+    case "ok":
+      return "bg-emerald-50 text-emerald-700"
+    case "running":
+    case "approval_required":
+      return "bg-amber-50 text-amber-700"
+    case "missing":
+    case "invalid_arguments":
+    case "error":
+    default:
+      return "bg-destructive/10 text-destructive"
+  }
+}
+
 function toolStatusLabel(status: string, copy: ChatCopy) {
   switch (status) {
     case "ok":
       return copy.toolStatusOk
     case "running":
       return copy.toolStatusRunning
+    case "approval_required":
+      return copy.toolStatusApprovalRequired
     case "missing":
       return copy.toolStatusMissing
     case "invalid_arguments":
@@ -2734,6 +2929,11 @@ const chatCopyKeys = {
   connectorCommand: "chat.connectorCommand",
   connectorTokenCreated: "chat.connectorTokenCreated",
   connectorTokenCreateFailed: "chat.connectorTokenCreateFailed",
+  connectorApprovalTitle: "chat.connectorApprovalTitle",
+  connectorApprovalDescription: "chat.connectorApprovalDescription",
+  connectorApprovalFailed: "chat.connectorApprovalFailed",
+  approveConnectorTask: "chat.approveConnectorTask",
+  rejectConnectorTask: "chat.rejectConnectorTask",
   localDevice: "chat.localDevice",
   noDeviceSelected: "chat.noDeviceSelected",
   selectDevice: "chat.selectDevice",
@@ -2793,8 +2993,11 @@ const chatCopyKeys = {
   streamModelRound: "chat.streamModelRound",
   streamThinking: "chat.streamThinking",
   usedTools: "chat.usedTools",
+  toolRound: "chat.toolRound",
+  toolArguments: "chat.toolArguments",
   toolStatusOk: "chat.toolStatusOk",
   toolStatusRunning: "chat.toolStatusRunning",
+  toolStatusApprovalRequired: "chat.toolStatusApprovalRequired",
   toolStatusError: "chat.toolStatusError",
   toolStatusMissing: "chat.toolStatusMissing",
   toolStatusInvalidArguments: "chat.toolStatusInvalidArguments",
