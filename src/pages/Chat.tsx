@@ -330,10 +330,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     [sessions, activeSessionID]
   )
   const currentSession = activeSession || draftSession
-  const activeToolCalls = useMemo(() => {
-    const messages = currentSession?.messages || []
-    return messages.flatMap((message) => message.tool_calls || [])
-  }, [currentSession?.messages])
   const selectedAgent = useMemo(() => {
     if (!isAdvanced) {
       return undefined
@@ -839,7 +835,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               model: resolvedModel,
               user_channel_id: selectedUserChannel?.id || 0,
               mode: "assistant",
-              messages: nextMessages.map((message) => ({ id: message.id, role: message.role, content: message.content })),
+              messages: advancedMessagePayload(nextMessages),
               agent_id: session.agent_id || "",
               skill_ids: session.skill_ids,
               mcp_server_ids: session.mcp_server_ids,
@@ -888,7 +884,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               model: resolvedModel,
               user_channel_id: selectedUserChannel?.id || 0,
               mode: activeRunMode,
-              messages: nextMessages.map((message) => ({ id: message.id, role: message.role, content: message.content })),
+              messages: advancedMessagePayload(nextMessages),
               agent_id: session.agent_id || "",
               skill_ids: session.skill_ids,
               mcp_server_ids: session.mcp_server_ids,
@@ -1324,6 +1320,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                               />
                             ) : (
                               <>
+                                {message.tool_calls && message.tool_calls.length > 0 && (
+                                  <ToolCallRounds toolCalls={message.tool_calls} copy={copy} />
+                                )}
+                                <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
                                 {isAdvanced && message.id === activeRun?.assistant_message_id && pendingConnectorApprovals.length > 0 && (
                                   <ConnectorApprovalPanel
                                     tasks={pendingConnectorApprovals}
@@ -1332,10 +1332,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                                     onDecide={decideConnectorApproval}
                                   />
                                 )}
-                                {message.tool_calls && message.tool_calls.length > 0 && (
-                                  <ToolCallRounds toolCalls={message.tool_calls} copy={copy} />
-                                )}
-                                <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
                               </>
                             )}
                           </div>
@@ -1372,28 +1368,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   ))
                 )}
               </div>
-
-              {isAdvanced && activeToolCalls.length > 0 && (
-                <div className="rounded-md border bg-muted/30 p-3">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">{copy.usedTools}</div>
-                  <div className="flex flex-wrap gap-2">
-                    {activeToolCalls.map((toolCall) => (
-                      <span
-                        key={toolCall.id}
-                        className={cn(
-                          "inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs",
-                          toolCall.status === "ok" ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"
-                        )}
-                        title={[toolCall.server, toolCall.tool].filter(Boolean).join(" / ") || toolCall.name}
-                      >
-                        <Server size={13} className="shrink-0" />
-                        <span className="truncate">{toolCall.server ? `${toolCall.server}: ` : ""}{toolCall.tool || toolCall.name}</span>
-                        <span className="shrink-0 opacity-70">{toolStatusLabel(toolCall.status, copy)}</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {attachments.length > 0 && (
                 <div className="flex flex-wrap gap-2">
@@ -1892,9 +1866,9 @@ function ConnectorApprovalTaskPreview({ task, copy }: { task: ConnectorApprovalT
   }
   if (action === "write_file") {
     return (
-      <div className="mt-3">
-        <div className="mb-1 break-all text-[11px] font-medium text-muted-foreground">{path}</div>
-        <pre className="max-h-72 overflow-auto rounded-md bg-muted p-2 text-xs">{stringArgument(task.payload, "content")}</pre>
+      <div className="mt-3 overflow-hidden rounded-md border">
+        <div className="border-b bg-muted/60 px-2 py-1 font-mono text-[11px] text-muted-foreground">{path}</div>
+        <LineDiff oldText={stringArgument(task.payload, "preview_old_content")} newText={stringArgument(task.payload, "content")} />
       </div>
     )
   }
@@ -1923,18 +1897,21 @@ function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: Cha
   const builtinKind = builtinToolKind(toolCall)
   const path = stringArgument(toolCall.arguments, "path")
   const content = stringArgument(toolCall.arguments, "content")
+  const command = stringArgument(toolCall.arguments, "command")
   const replacements = replacementEntriesFromArguments(toolCall.arguments)
 
   useEffect(() => {
     setOpen(shouldAutoOpen)
   }, [shouldAutoOpen, toolCall.id])
 
-  if (builtinKind === "read") {
+  if (builtinKind === "read" || builtinKind === "list" || builtinKind === "command") {
     return (
       <div className="rounded-md border bg-background p-2">
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <Server size={13} className="shrink-0" />
-          <span className="min-w-0 truncate font-medium">{path || toolLabel(toolCall)}</span>
+          <span className="min-w-0 truncate font-medium">
+            {builtinKind === "command" ? command || toolLabel(toolCall) : path || "."}
+          </span>
           <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
             {toolStatusLabel(toolCall.status, copy)}
           </span>
@@ -1960,10 +1937,9 @@ function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: Cha
         {!open && <span className="ml-auto text-[11px] text-muted-foreground">{copy.expandToolCall}</span>}
       </summary>
       {builtinKind === "write" ? (
-        <>
-          <div className="mt-2 text-[11px] font-medium text-muted-foreground">{copy.toolWriteContent}</div>
-          <pre className="mt-1 max-h-72 overflow-auto rounded bg-muted p-2 text-xs">{content}</pre>
-        </>
+        <div className="mt-2 overflow-hidden rounded-md border">
+          <LineDiff oldText={stringArgument(toolCall.arguments, "preview_old_content")} newText={content} />
+        </div>
       ) : builtinKind === "replace" ? (
         <ReplacementDiffList entries={replacements} copy={copy} />
       ) : (
@@ -2437,6 +2413,15 @@ async function saveAdvancedSessionSnapshot(session: ChatSession): Promise<ChatSe
     })),
   })
   return normalizeSession(res.data)
+}
+
+function advancedMessagePayload(messages: ChatMessage[]) {
+  return messages.map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    tool_calls: message.tool_calls || [],
+  }))
 }
 
 function parseSSEEvent(raw: string): ParsedSSEEvent | null {
@@ -3100,16 +3085,25 @@ function toolLabel(toolCall: ChatToolCall) {
   return `${toolCall.server ? `${toolCall.server}: ` : ""}${toolCall.tool || toolCall.name}`
 }
 
-function builtinToolKind(toolCall: ChatToolCall): "read" | "write" | "replace" | "" {
-  const value = `${toolCall.name} ${toolCall.tool}`.toLowerCase()
-  if (value.includes("workspace_read_file") || value.includes("read_file")) {
+function builtinToolKind(toolCall: ChatToolCall): "list" | "read" | "write" | "replace" | "command" | "" {
+  const name = toolCall.name.toLowerCase()
+  if (!name.startsWith("workspace_")) {
+    return ""
+  }
+  if (name.includes("workspace_list_files")) {
+    return "list"
+  }
+  if (name.includes("workspace_read_file")) {
     return "read"
   }
-  if (value.includes("workspace_write_file") || value.includes("write_file")) {
+  if (name.includes("workspace_write_file")) {
     return "write"
   }
-  if (value.includes("workspace_replace_text") || value.includes("replace_text")) {
+  if (name.includes("workspace_replace_text")) {
     return "replace"
+  }
+  if (name.includes("workspace_run_command")) {
+    return "command"
   }
   return ""
 }
