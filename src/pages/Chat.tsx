@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link } from "react-router-dom"
-import { Bot, Check, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
+import { ArrowDown, Bot, Check, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
 import api from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -244,6 +244,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [isStreamActive, setIsStreamActive] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false)
   const [editingMessageID, setEditingMessageID] = useState("")
   const [editingContent, setEditingContent] = useState("")
 
@@ -330,6 +333,17 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     [sessions, activeSessionID]
   )
   const currentSession = activeSession || draftSession
+  const latestMessage = currentSession?.messages[currentSession.messages.length - 1]
+  const latestMessageSignal = useMemo(
+    () => [
+      currentSession?.id || "",
+      currentSession?.messages.length || 0,
+      latestMessage?.id || "",
+      latestMessage?.content || "",
+      JSON.stringify(latestMessage?.tool_calls || []),
+    ].join("|"),
+    [currentSession?.id, currentSession?.messages.length, latestMessage?.id, latestMessage?.content, latestMessage?.tool_calls]
+  )
   const selectedAgent = useMemo(() => {
     if (!isAdvanced) {
       return undefined
@@ -429,6 +443,34 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       localStorage.removeItem(storeKeys.selectedSession)
     }
   }, [activeSessionID, storeKeys.selectedSession])
+
+  const messagesAtBottom = () => {
+    const element = messagesContainerRef.current
+    if (!element) {
+      return true
+    }
+    return element.scrollHeight - element.scrollTop - element.clientHeight < 80
+  }
+
+  const scrollMessagesToLatest = (behavior: ScrollBehavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ block: "end", behavior })
+    setShowJumpToLatest(false)
+  }
+
+  const handleMessagesScroll = () => {
+    setShowJumpToLatest(!messagesAtBottom())
+  }
+
+  useEffect(() => {
+    setShowJumpToLatest(false)
+    requestAnimationFrame(() => scrollMessagesToLatest("auto"))
+  }, [currentSession?.id])
+
+  useEffect(() => {
+    if (!showJumpToLatest) {
+      requestAnimationFrame(() => scrollMessagesToLatest("smooth"))
+    }
+  }, [latestMessageSignal, showJumpToLatest])
 
   useEffect(() => {
     if (!isAdvanced && modelName) {
@@ -1298,74 +1340,92 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="min-h-[360px] space-y-3 rounded-md border p-3">
+              <div
+                ref={messagesContainerRef}
+                className="relative max-h-[64vh] min-h-[360px] space-y-3 overflow-y-auto rounded-md border p-3"
+                onScroll={handleMessagesScroll}
+              >
                 {!currentSession || currentSession.messages.length === 0 ? (
                   <div className="py-20 text-center text-sm text-muted-foreground">{copy.noMessages}</div>
                 ) : (
-                  currentSession.messages.map((message) => (
-                    <div key={message.id} className={message.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                      <div className="group w-fit max-w-full rounded-md border bg-background p-3 text-sm">
-                        <div className="flex items-start gap-2">
-                          {message.role === "user" ? (
-                            <User className="mt-0.5 h-4 w-4 shrink-0" />
-                          ) : (
-                            <Bot className="mt-0.5 h-4 w-4 shrink-0" />
-                          )}
-                          <div className="min-w-0 flex-1">
+                  <>
+                    {currentSession.messages.map((message) => (
+                      <div key={message.id} className={message.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                        <div className="group w-fit max-w-full rounded-md border bg-background p-3 text-sm">
+                          <div className="flex items-start gap-2">
+                            {message.role === "user" ? (
+                              <User className="mt-0.5 h-4 w-4 shrink-0" />
+                            ) : (
+                              <Bot className="mt-0.5 h-4 w-4 shrink-0" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              {editingMessageID === message.id ? (
+                                <textarea
+                                  className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                                  value={editingContent}
+                                  onChange={(event) => setEditingContent(event.target.value)}
+                                />
+                              ) : (
+                                <>
+                                  {message.tool_calls && message.tool_calls.length > 0 && (
+                                    <ToolCallRounds toolCalls={message.tool_calls} copy={copy} />
+                                  )}
+                                  <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
+                                  {isAdvanced && message.id === activeRun?.assistant_message_id && pendingConnectorApprovals.length > 0 && (
+                                    <ConnectorApprovalPanel
+                                      tasks={pendingConnectorApprovals}
+                                      copy={copy}
+                                      decidingTaskID={decidingConnectorTaskID}
+                                      onDecide={decideConnectorApproval}
+                                    />
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div
+                            className={cn(
+                              "mt-2 flex justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+                              editingMessageID === message.id && "opacity-100",
+                              message.role === "assistant" && isActiveRunRunning && activeRun?.assistant_message_id === message.id && "pointer-events-none opacity-0"
+                            )}
+                          >
                             {editingMessageID === message.id ? (
-                              <textarea
-                                className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                                value={editingContent}
-                                onChange={(event) => setEditingContent(event.target.value)}
-                              />
+                              <>
+                                <Button variant="ghost" size="sm" onClick={saveEditedMessage} title={copy.saveMessage}>
+                                  <Check size={15} />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={cancelEdit} title={copy.cancelEdit}>
+                                  <X size={15} />
+                                </Button>
+                              </>
                             ) : (
                               <>
-                                {message.tool_calls && message.tool_calls.length > 0 && (
-                                  <ToolCallRounds toolCalls={message.tool_calls} copy={copy} />
-                                )}
-                                <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
-                                {isAdvanced && message.id === activeRun?.assistant_message_id && pendingConnectorApprovals.length > 0 && (
-                                  <ConnectorApprovalPanel
-                                    tasks={pendingConnectorApprovals}
-                                    copy={copy}
-                                    decidingTaskID={decidingConnectorTaskID}
-                                    onDecide={decideConnectorApproval}
-                                  />
-                                )}
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => beginEditMessage(message)} title={copy.editMessage}>
+                                  <Pencil size={14} />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
+                                  <Trash2 size={14} />
+                                </Button>
                               </>
                             )}
                           </div>
                         </div>
-                        <div
-                          className={cn(
-                            "mt-2 flex justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
-                            editingMessageID === message.id && "opacity-100",
-                            message.role === "assistant" && isActiveRunRunning && activeRun?.assistant_message_id === message.id && "pointer-events-none opacity-0"
-                          )}
-                        >
-                          {editingMessageID === message.id ? (
-                            <>
-                              <Button variant="ghost" size="sm" onClick={saveEditedMessage} title={copy.saveMessage}>
-                                <Check size={15} />
-                              </Button>
-                              <Button variant="ghost" size="sm" onClick={cancelEdit} title={copy.cancelEdit}>
-                                <X size={15} />
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => beginEditMessage(message)} title={copy.editMessage}>
-                                <Pencil size={14} />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
-                                <Trash2 size={14} />
-                              </Button>
-                            </>
-                          )}
-                        </div>
                       </div>
-                    </div>
-                  ))
+                    ))}
+                  </>
+                )}
+                <div ref={messagesEndRef} />
+                {showJumpToLatest && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="sticky bottom-2 z-10 ml-auto flex gap-1 shadow-sm"
+                    onClick={() => scrollMessagesToLatest()}
+                  >
+                    <ArrowDown size={14} />
+                    {copy.jumpToLatest}
+                  </Button>
                 )}
               </div>
 
@@ -1899,6 +1959,9 @@ function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: Cha
   const content = stringArgument(toolCall.arguments, "content")
   const command = stringArgument(toolCall.arguments, "command")
   const replacements = replacementEntriesFromArguments(toolCall.arguments)
+  const title = builtinKind
+    ? builtinToolTitle(builtinKind, path, command, copy, booleanArgument(toolCall.arguments, "preview_old_content_available"))
+    : toolLabel(toolCall)
 
   useEffect(() => {
     setOpen(shouldAutoOpen)
@@ -1909,9 +1972,7 @@ function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: Cha
       <div className="rounded-md border bg-background p-2">
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <Server size={13} className="shrink-0" />
-          <span className="min-w-0 truncate font-medium">
-            {builtinKind === "command" ? command || toolLabel(toolCall) : path || "."}
-          </span>
+          <span className="min-w-0 truncate font-medium">{title}</span>
           <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
             {toolStatusLabel(toolCall.status, copy)}
           </span>
@@ -1928,9 +1989,7 @@ function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: Cha
     >
       <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-xs [&::-webkit-details-marker]:hidden">
         <Server size={13} className="shrink-0" />
-        <span className="min-w-0 truncate font-medium">
-          {builtinKind && path ? path : toolLabel(toolCall)}
-        </span>
+        <span className="min-w-0 truncate font-medium">{title}</span>
         <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
           {toolStatusLabel(toolCall.status, copy)}
         </span>
@@ -3108,6 +3167,26 @@ function builtinToolKind(toolCall: ChatToolCall): "list" | "read" | "write" | "r
   return ""
 }
 
+function builtinToolTitle(
+  kind: "list" | "read" | "write" | "replace" | "command",
+  path: string,
+  command: string,
+  copy: ChatCopy,
+  writeModifiesExisting: boolean
+) {
+  const target = kind === "command" ? command || "." : path || "."
+  const template = kind === "list"
+    ? copy.toolActionListFiles
+    : kind === "read"
+      ? copy.toolActionReadFile
+      : kind === "command"
+        ? copy.toolActionRunCommand
+        : kind === "write"
+          ? writeModifiesExisting ? copy.toolActionEditFile : copy.toolActionWriteFile
+          : copy.toolActionEditFile
+  return template.replace("{target}", target)
+}
+
 function stringArgument(value: Record<string, unknown> | undefined, key: string) {
   const item = value?.[key]
   if (typeof item === "string") {
@@ -3117,6 +3196,10 @@ function stringArgument(value: Record<string, unknown> | undefined, key: string)
     return String(item)
   }
   return ""
+}
+
+function booleanArgument(value: Record<string, unknown> | undefined, key: string) {
+  return value?.[key] === true
 }
 
 function toolStatusClassName(status: string) {
@@ -3307,6 +3390,12 @@ const chatCopyKeys = {
   toolWriteContent: "chat.toolWriteContent",
   toolReplaceOld: "chat.toolReplaceOld",
   toolReplaceNew: "chat.toolReplaceNew",
+  toolActionListFiles: "chat.toolActionListFiles",
+  toolActionReadFile: "chat.toolActionReadFile",
+  toolActionRunCommand: "chat.toolActionRunCommand",
+  toolActionWriteFile: "chat.toolActionWriteFile",
+  toolActionEditFile: "chat.toolActionEditFile",
+  jumpToLatest: "chat.jumpToLatest",
   expandToolCall: "chat.expandToolCall",
   toolStatusOk: "chat.toolStatusOk",
   toolStatusRunning: "chat.toolStatusRunning",
