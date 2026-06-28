@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
-import api, { getAuthLoginURL } from "@/lib/api"
+import api, { getOAuthLoginURL } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
@@ -13,10 +13,18 @@ import { passkeyCredentialToJSON, passkeySupported, preparePasskeyRequestOptions
 
 type Mode = "login" | "register"
 
+interface OAuthProvider {
+  key: string
+  name: string
+  login_url: string
+  callback_url: string
+}
+
 export default function Login() {
   const { language, t } = useI18n()
   const { success, error } = useToast()
   const copy = language === "zh" ? zhCopy : enCopy
+  const oauthCopy = language === "zh" ? zhOAuthLoginCopy : enOAuthLoginCopy
   const { data: settings, isLoading: isSettingsLoading } = useQuery<PublicSettings>({
     queryKey: ["public-settings"],
     queryFn: async () => {
@@ -25,6 +33,7 @@ export default function Login() {
     },
   })
   const publicSettings = withPublicSettingsDefaults(settings)
+  const oauthProviders = parseOAuthProviders(publicSettings.oauth_providers)
   const initialMode = publicSettings.password_login_enabled ? "login" : "register"
   const [mode, setMode] = useState<Mode>(initialMode)
   const [identifier, setIdentifier] = useState("")
@@ -150,16 +159,17 @@ export default function Login() {
     onError: (err) => error(err instanceof Error ? err.message : copy.sendCodeFailed),
   })
 
-  const handleOIDCLogin = () => {
+  const handleOAuthLogin = (provider: OAuthProvider) => {
     if (!agreementReady) {
       error(copy.agreementRequired)
       return
     }
-    window.location.href = getAuthLoginURL(new URLSearchParams(window.location.search).get("ref"), true)
+    window.location.href = getOAuthLoginURL(provider.login_url || `/auth/oauth/${provider.key}/login`, new URLSearchParams(window.location.search).get("ref"), true)
   }
 
   const passwordAuthEnabled = publicSettings.password_login_enabled || publicSettings.password_registration_enabled
-  const oidcOnly = publicSettings.oidc_enabled && !passwordAuthEnabled && !publicSettings.passkey_enabled
+  const oauthEnabled = publicSettings.oidc_enabled && oauthProviders.length > 0
+  const oidcOnly = oauthEnabled && !passwordAuthEnabled && !publicSettings.passkey_enabled
   const privacyHref = legalHref("privacy", publicSettings)
   const termsHref = legalHref("terms", publicSettings)
   const hasAgreement = Boolean(privacyHref || termsHref)
@@ -169,7 +179,7 @@ export default function Login() {
   const canSubmit = (mode === "login"
     ? Boolean(identifier.trim() && password)
     : Boolean(username.trim() && email.trim() && password && (!publicSettings.email_verification_required || emailCode.trim()))) && agreementReady
-  const noLoginMethod = !passwordAuthEnabled && !publicSettings.oidc_enabled && !publicSettings.passkey_enabled
+  const noLoginMethod = !passwordAuthEnabled && !oauthEnabled && !publicSettings.passkey_enabled
 
   if (isSettingsLoading && !settings) {
     return (
@@ -260,11 +270,11 @@ export default function Login() {
                 </Button>
               )}
 
-              {publicSettings.oidc_enabled && (
-                <Button variant="outline" className="w-full" disabled={!agreementReady} onClick={handleOIDCLogin}>
-                  {t("login.button")}
+              {oauthEnabled && oauthProviders.map((provider) => (
+                <Button key={provider.key} variant="outline" className="w-full" disabled={!agreementReady} onClick={() => handleOAuthLogin(provider)}>
+                  {oauthCopy.loginWith.replace("{name}", provider.name || provider.key)}
                 </Button>
-              )}
+              ))}
 
               {publicSettings.passkey_enabled && (
                 <Button variant="outline" className="w-full" disabled={!agreementReady || signInWithPasskey.isPending} onClick={() => signInWithPasskey.mutate()}>
@@ -393,6 +403,25 @@ function legalHref(kind: LegalKind, settings: PublicSettings) {
   return inlineContent.trim() ? `/${kind}` : ""
 }
 
+function parseOAuthProviders(raw: string): OAuthProvider[] {
+  try {
+    const parsed = JSON.parse(raw || "[]")
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return parsed
+      .map((item) => ({
+        key: typeof item?.key === "string" ? item.key : "",
+        name: typeof item?.name === "string" ? item.name : "",
+        login_url: typeof item?.login_url === "string" ? item.login_url : "",
+        callback_url: typeof item?.callback_url === "string" ? item.callback_url : "",
+      }))
+      .filter((item) => item.key && item.name)
+  } catch {
+    return []
+  }
+}
+
 function HCaptcha({ siteKey, onToken }: { siteKey: string; onToken: (token: string) => void }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const widgetIDRef = useRef<string | null>(null)
@@ -478,4 +507,12 @@ const enCopy: typeof zhCopy = {
   agreementNoticePrefix: "By continuing, you agree to",
   agreementAnd: "and",
   agreementRequired: "Please read and agree to the agreements first",
+}
+
+const zhOAuthLoginCopy = {
+  loginWith: "用 {name} 登录",
+}
+
+const enOAuthLoginCopy: typeof zhOAuthLoginCopy = {
+  loginWith: "Sign in with {name}",
 }

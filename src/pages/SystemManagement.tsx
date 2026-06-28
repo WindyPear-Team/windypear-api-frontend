@@ -126,6 +126,24 @@ interface MetaModelDraft {
   enabled: boolean
 }
 
+interface OAuthProviderConfig {
+  key: string
+  name: string
+  enabled: boolean
+  issuer: string
+  client_id: string
+  client_secret: string
+  auth_url: string
+  token_url: string
+  userinfo_url: string
+  scope: string
+  redirect_url: string
+  subject_key: string
+  email_key: string
+  name_key: string
+  avatar_key: string
+}
+
 interface RedeemCodeDraft {
   code: string
   amount: string
@@ -213,6 +231,7 @@ interface SystemSettings extends PublicSettings {
   oidc_client_id: string
   oidc_client_secret: string
   oidc_redirect_url: string
+  oauth_providers: string
   rate_limit_enabled: boolean
   rate_limit_requests_per_minute: string
   rate_limit_burst: string
@@ -301,6 +320,7 @@ const defaultSystemSettings: SystemSettings = {
   oidc_client_id: "",
   oidc_client_secret: "",
   oidc_redirect_url: "",
+  oauth_providers: "[]",
   rate_limit_enabled: true,
   rate_limit_requests_per_minute: "60",
   rate_limit_burst: "10",
@@ -1044,6 +1064,11 @@ export default function SystemManagement({ section = "general", initialTab }: { 
             <TextField label={copy.oidcClientSecret} value={form.oidc_client_secret} placeholder={copy.oidcClientSecretPlaceholder} type="password" onChange={(value) => updateField("oidc_client_secret", value)} />
             <TextField label={copy.oidcRedirectURL} value={form.oidc_redirect_url} placeholder={copy.oidcRedirectURLPlaceholder} onChange={(value) => updateField("oidc_redirect_url", value)} />
           </div>
+          <OAuthProvidersEditor
+            value={form.oauth_providers}
+            baseURL={form.base_url}
+            onChange={(value) => updateField("oauth_providers", value)}
+          />
         </SettingsPanel>
       )}
 
@@ -1766,6 +1791,232 @@ function systemTabs(copy: SystemCopy): Array<{ id: SystemTab; label: string; ico
     { id: "subscriptionPlans", label: copy.subscriptionPlans, icon: HandCoins },
     { id: "redeemCodes", label: copy.redeemCodes, icon: Gift },
   ]
+}
+
+const zhOAuthProviderCopy = {
+  title: "自定义 OAuth2 服务商",
+  description: "可添加多个服务商；每个服务商都有独立登录入口和回调地址，并可配置端点与用户信息字段映射。",
+  addProvider: "新增服务商",
+  empty: "暂无自定义 OAuth2 服务商。",
+  provider: "服务商",
+  status: "状态",
+  callbackURL: "回调地址",
+  actions: "操作",
+  enabled: "启用",
+  disabled: "停用",
+  callbackFallback: "设置系统 Base URL 或填写回调地址覆盖",
+  edit: "编辑",
+  delete: "删除",
+  addTitle: "新增 OAuth2 服务商",
+  editTitle: "编辑 OAuth2 服务商",
+  enabledField: "启用",
+  providerName: "服务商名称",
+  providerKey: "服务商 Key",
+  callbackOverride: "回调地址覆盖",
+  issuer: "Issuer（OIDC 可选）",
+  authEndpoint: "授权端点",
+  tokenEndpoint: "Token 端点",
+  userInfoEndpoint: "用户信息端点",
+  subjectKey: "用户 ID 字段",
+  emailKey: "邮箱字段",
+  nameKey: "昵称字段",
+  avatarKey: "头像字段",
+  cancel: "取消",
+  saveProvider: "保存服务商",
+}
+
+type OAuthProviderCopy = typeof zhOAuthProviderCopy
+
+const enOAuthProviderCopy: OAuthProviderCopy = {
+  title: "Custom OAuth2 Providers",
+  description: "Add multiple providers with separate login and callback URLs, endpoints, and user profile field mappings.",
+  addProvider: "Add provider",
+  empty: "No custom OAuth2 providers.",
+  provider: "Provider",
+  status: "Status",
+  callbackURL: "Callback URL",
+  actions: "Actions",
+  enabled: "Enabled",
+  disabled: "Disabled",
+  callbackFallback: "Set Base URL or override callback URL",
+  edit: "Edit",
+  delete: "Delete",
+  addTitle: "Add OAuth2 Provider",
+  editTitle: "Edit OAuth2 Provider",
+  enabledField: "Enabled",
+  providerName: "Provider name",
+  providerKey: "Provider key",
+  callbackOverride: "Callback URL override",
+  issuer: "Issuer (OIDC optional)",
+  authEndpoint: "Authorization endpoint",
+  tokenEndpoint: "Token endpoint",
+  userInfoEndpoint: "User info endpoint",
+  subjectKey: "User ID key",
+  emailKey: "Email key",
+  nameKey: "Name key",
+  avatarKey: "Avatar key",
+  cancel: "Cancel",
+  saveProvider: "Save provider",
+}
+
+function OAuthProvidersEditor({ value, baseURL, onChange }: { value: string; baseURL: string; onChange: (value: string) => void }) {
+  const { language } = useI18n()
+  const oauthCopy = language === "zh" ? zhOAuthProviderCopy : enOAuthProviderCopy
+  const providers = parseOAuthProviderConfigs(value)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [draft, setDraft] = useState<OAuthProviderConfig>(emptyOAuthProviderConfig)
+
+  const openCreate = () => {
+    setEditingIndex(null)
+    setDraft({
+      ...emptyOAuthProviderConfig(),
+      key: uniqueOAuthProviderKey(providers),
+      name: "OAuth",
+    })
+    setDialogOpen(true)
+  }
+  const openEdit = (index: number) => {
+    setEditingIndex(index)
+    setDraft({ ...providers[index] })
+    setDialogOpen(true)
+  }
+  const saveDraft = () => {
+    const normalizedDraft = {
+      ...draft,
+      key: normalizeOAuthProviderKey(draft.key),
+      name: draft.name.trim() || draft.key.trim() || "OAuth",
+    }
+    const next = editingIndex === null
+      ? [...providers, normalizedDraft]
+      : providers.map((provider, index) => index === editingIndex ? normalizedDraft : provider)
+    onChange(stringifyOAuthProviderConfigs(next))
+    setDialogOpen(false)
+  }
+  const removeProvider = (index: number) => {
+    onChange(stringifyOAuthProviderConfigs(providers.filter((_, providerIndex) => providerIndex !== index)))
+  }
+
+  return (
+    <div className="mt-6 space-y-4 border-t pt-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <SectionTitle title={oauthCopy.title} description={oauthCopy.description} />
+        <Button type="button" className="gap-2" onClick={openCreate}>
+          <Plus size={16} />
+          {oauthCopy.addProvider}
+        </Button>
+      </div>
+      {providers.length === 0 ? (
+        <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">{oauthCopy.empty}</div>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <div className="min-w-[760px]">
+            <div className="grid grid-cols-[1fr_140px_90px_1.4fr_170px] border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+              <div>{oauthCopy.provider}</div>
+              <div>Key</div>
+              <div>{oauthCopy.status}</div>
+              <div>{oauthCopy.callbackURL}</div>
+              <div className="text-right">{oauthCopy.actions}</div>
+            </div>
+            {providers.map((provider, index) => {
+              const callbackURL = oauthProviderCallbackURL(provider, baseURL)
+              return (
+                <div key={`${provider.key}-${index}`} className="grid grid-cols-[1fr_140px_90px_1.4fr_170px] items-center gap-3 border-b px-3 py-3 text-sm last:border-b-0">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{provider.name || provider.key || "OAuth"}</div>
+                    <div className="truncate text-xs text-muted-foreground">{provider.auth_url || provider.issuer || "-"}</div>
+                  </div>
+                  <div className="font-mono text-xs">{provider.key || "-"}</div>
+                  <div>{provider.enabled ? oauthCopy.enabled : oauthCopy.disabled}</div>
+                  <div className="break-all font-mono text-xs text-muted-foreground">{callbackURL || oauthCopy.callbackFallback}</div>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => openEdit(index)}>
+                      <Pencil size={15} />
+                      {oauthCopy.edit}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="gap-2 text-destructive hover:text-destructive" onClick={() => removeProvider(index)}>
+                      <Trash2 size={15} />
+                      {oauthCopy.delete}
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+      <OAuthProviderDialog
+        open={dialogOpen}
+        baseURL={baseURL}
+        draft={draft}
+        title={editingIndex === null ? oauthCopy.addTitle : oauthCopy.editTitle}
+        copy={oauthCopy}
+        onDraftChange={setDraft}
+        onClose={() => setDialogOpen(false)}
+        onSave={saveDraft}
+      />
+    </div>
+  )
+}
+
+function OAuthProviderDialog({
+  open,
+  title,
+  draft,
+  baseURL,
+  copy,
+  onDraftChange,
+  onClose,
+  onSave,
+}: {
+  open: boolean
+  title: string
+  draft: OAuthProviderConfig
+  baseURL: string
+  copy: OAuthProviderCopy
+  onDraftChange: (draft: OAuthProviderConfig) => void
+  onClose: () => void
+  onSave: () => void
+}) {
+  const callbackURL = oauthProviderCallbackURL(draft, baseURL)
+  const updateDraft = (patch: Partial<OAuthProviderConfig>) => onDraftChange({ ...draft, ...patch })
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-5">
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="text-xs font-medium text-muted-foreground">{copy.callbackURL}</div>
+            <div className="mt-1 break-all font-mono text-xs">{callbackURL || copy.callbackFallback}</div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ToggleField label={copy.enabledField} checked={draft.enabled} onChange={(checked) => updateDraft({ enabled: checked })} />
+            <TextField label={copy.providerName} value={draft.name} placeholder="GitHub" onChange={(value) => updateDraft({ name: value })} />
+            <TextField label={copy.providerKey} value={draft.key} placeholder="github" onChange={(value) => updateDraft({ key: normalizeOAuthProviderKey(value) })} />
+            <TextField label={copy.callbackOverride} value={draft.redirect_url} placeholder={callbackURLFromBaseURL(baseURL, `/auth/oauth/${draft.key || "github"}/callback`)} onChange={(value) => updateDraft({ redirect_url: value })} />
+            <TextField label="Client ID" value={draft.client_id} placeholder="client id" onChange={(value) => updateDraft({ client_id: value })} />
+            <TextField label="Client Secret" value={draft.client_secret} placeholder="client secret" type="password" onChange={(value) => updateDraft({ client_secret: value })} />
+            <TextField label={copy.issuer} value={draft.issuer} placeholder="https://accounts.example.com" onChange={(value) => updateDraft({ issuer: value })} />
+            <TextField label="Scope" value={draft.scope} placeholder="openid profile email" onChange={(value) => updateDraft({ scope: value })} />
+            <TextField label={copy.authEndpoint} value={draft.auth_url} placeholder="https://provider.example.com/oauth/authorize" onChange={(value) => updateDraft({ auth_url: value })} />
+            <TextField label={copy.tokenEndpoint} value={draft.token_url} placeholder="https://provider.example.com/oauth/token" onChange={(value) => updateDraft({ token_url: value })} />
+            <TextField label={copy.userInfoEndpoint} value={draft.userinfo_url} placeholder="https://provider.example.com/userinfo" onChange={(value) => updateDraft({ userinfo_url: value })} />
+            <TextField label={copy.subjectKey} value={draft.subject_key} placeholder="sub / id / data.id" onChange={(value) => updateDraft({ subject_key: value })} />
+            <TextField label={copy.emailKey} value={draft.email_key} placeholder="email / data.email" onChange={(value) => updateDraft({ email_key: value })} />
+            <TextField label={copy.nameKey} value={draft.name_key} placeholder="name / login / username" onChange={(value) => updateDraft({ name_key: value })} />
+            <TextField label={copy.avatarKey} value={draft.avatar_key} placeholder="picture / avatar_url" onChange={(value) => updateDraft({ avatar_key: value })} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>{copy.cancel}</Button>
+          <Button type="button" onClick={onSave}>{copy.saveProvider}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function SettingsPanel({ title, children }: { title: string; children: ReactNode }) {
@@ -3010,6 +3261,98 @@ function csvToJSONString(value: string) {
 function callbackURLFromBaseURL(baseURL: string, path: string) {
   const trimmed = baseURL.trim().replace(/\/+$/, "")
   return trimmed ? `${trimmed}${path}` : ""
+}
+
+function oauthProviderCallbackURL(provider: OAuthProviderConfig, baseURL: string) {
+  return provider.redirect_url.trim() || callbackURLFromBaseURL(baseURL, `/auth/oauth/${provider.key || "{key}"}/callback`)
+}
+
+function emptyOAuthProviderConfig(): OAuthProviderConfig {
+  return {
+    key: "",
+    name: "",
+    enabled: true,
+    issuer: "",
+    client_id: "",
+    client_secret: "",
+    auth_url: "",
+    token_url: "",
+    userinfo_url: "",
+    scope: "openid profile email",
+    redirect_url: "",
+    subject_key: "sub",
+    email_key: "email",
+    name_key: "name",
+    avatar_key: "picture",
+  }
+}
+
+function parseOAuthProviderConfigs(raw: string): OAuthProviderConfig[] {
+  try {
+    const parsed = JSON.parse(raw || "[]")
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return parsed.map((item) => ({
+      ...emptyOAuthProviderConfig(),
+      key: typeof item?.key === "string" ? item.key : "",
+      name: typeof item?.name === "string" ? item.name : "",
+      enabled: item?.enabled !== false,
+      issuer: typeof item?.issuer === "string" ? item.issuer : "",
+      client_id: typeof item?.client_id === "string" ? item.client_id : "",
+      client_secret: typeof item?.client_secret === "string" ? item.client_secret : "",
+      auth_url: typeof item?.auth_url === "string" ? item.auth_url : "",
+      token_url: typeof item?.token_url === "string" ? item.token_url : "",
+      userinfo_url: typeof item?.userinfo_url === "string" ? item.userinfo_url : "",
+      scope: typeof item?.scope === "string" ? item.scope : "openid profile email",
+      redirect_url: typeof item?.redirect_url === "string" ? item.redirect_url : "",
+      subject_key: typeof item?.subject_key === "string" ? item.subject_key : "sub",
+      email_key: typeof item?.email_key === "string" ? item.email_key : "email",
+      name_key: typeof item?.name_key === "string" ? item.name_key : "name",
+      avatar_key: typeof item?.avatar_key === "string" ? item.avatar_key : "picture",
+    }))
+  } catch {
+    return []
+  }
+}
+
+function stringifyOAuthProviderConfigs(providers: OAuthProviderConfig[]) {
+  return JSON.stringify(providers.map((provider) => ({
+    ...provider,
+    key: normalizeOAuthProviderKey(provider.key),
+    name: provider.name.trim(),
+    issuer: provider.issuer.trim(),
+    client_id: provider.client_id.trim(),
+    client_secret: provider.client_secret.trim(),
+    auth_url: provider.auth_url.trim(),
+    token_url: provider.token_url.trim(),
+    userinfo_url: provider.userinfo_url.trim(),
+    scope: provider.scope.trim(),
+    redirect_url: provider.redirect_url.trim(),
+    subject_key: provider.subject_key.trim() || "sub",
+    email_key: provider.email_key.trim() || "email",
+    name_key: provider.name_key.trim() || "name",
+    avatar_key: provider.avatar_key.trim() || "picture",
+  })), null, 2)
+}
+
+function normalizeOAuthProviderKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+function uniqueOAuthProviderKey(providers: OAuthProviderConfig[]) {
+  const used = new Set(providers.map((provider) => provider.key))
+  for (let index = 1; index < 1000; index += 1) {
+    const key = index === 1 ? "oauth" : `oauth-${index}`
+    if (!used.has(key)) {
+      return key
+    }
+  }
+  return "oauth"
 }
 
 function validateCheckInStreakRewards(raw: string, copy: SystemCopy): { valid: true; value: string } | { valid: false; error: string } {

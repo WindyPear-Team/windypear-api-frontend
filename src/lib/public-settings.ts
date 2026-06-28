@@ -73,6 +73,7 @@ export interface PublicSettings {
   payment_recharge_presets: string
   payment_methods: string
   oidc_enabled: boolean
+  oauth_providers: string
   passkey_enabled: boolean
   password_login_enabled: boolean
   password_registration_enabled: boolean
@@ -156,6 +157,7 @@ export const defaultPublicSettings: PublicSettings = {
   payment_recharge_presets: "[\"5\",\"10\",\"20\",\"50\",\"100\"]",
   payment_methods: "[\"alipay\",\"wxpay\"]",
   oidc_enabled: false,
+  oauth_providers: "[]",
   passkey_enabled: false,
   password_login_enabled: true,
   password_registration_enabled: true,
