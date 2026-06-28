@@ -533,10 +533,24 @@ function UpstreamDialog({
 }) {
   const { t } = useI18n()
   const [draft, setDraft] = useState<Partial<UpstreamChannel>>(emptyUpstream(userChannels[0]?.id))
+  const selectedType = draft.type || "completion"
+  const selectedTypeConfig = channelTypeConfig(selectedType)
 
   useEffect(() => {
     setDraft(channel || emptyUpstream(userChannels[0]?.id))
   }, [channel, userChannels])
+
+  const updateType = (type: string) => {
+    const nextConfig = channelTypeConfig(type)
+    const currentConfig = channelTypeConfig(draft.type || "")
+    const currentBaseURL = (draft.base_url || "").trim()
+    const shouldUseDefaultBaseURL = !currentBaseURL || currentBaseURL === currentConfig.defaultBaseURL
+    setDraft({
+      ...draft,
+      type,
+      base_url: shouldUseDefaultBaseURL ? nextConfig.defaultBaseURL || "" : draft.base_url,
+    })
+  }
 
   return (
     <Dialog open={Boolean(channel)} onOpenChange={(open) => !open && onClose()}>
@@ -552,8 +566,8 @@ function UpstreamDialog({
           <FieldLabel label={t("channels.type")}>
             <select
               className="h-10 rounded-md border bg-background px-3 text-sm"
-              value={draft.type || "openai"}
-              onChange={(e) => setDraft({ ...draft, type: e.target.value })}
+              value={selectedType}
+              onChange={(e) => updateType(e.target.value)}
             >
               {providerTypes.map((item) => (
                 <option key={item.value} value={item.value}>{item.label}</option>
@@ -561,10 +575,31 @@ function UpstreamDialog({
             </select>
           </FieldLabel>
           <FieldLabel label={t("admin.baseURL")}>
-            <Input value={draft.base_url || ""} onChange={(e) => setDraft({ ...draft, base_url: e.target.value })} placeholder="https://api.example.com/v1" />
+            <div className="flex gap-2">
+              <Input
+                value={draft.base_url || ""}
+                onChange={(e) => setDraft({ ...draft, base_url: e.target.value })}
+                placeholder={selectedTypeConfig.baseURLPlaceholder || "https://api.example.com/v1"}
+              />
+              {selectedTypeConfig.defaultBaseURL && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDraft({ ...draft, base_url: selectedTypeConfig.defaultBaseURL })}
+                >
+                  {selectedTypeConfig.defaultBaseURLAction}
+                </Button>
+              )}
+            </div>
+            {selectedTypeConfig.baseURLHelp && <p className="text-xs text-muted-foreground">{selectedTypeConfig.baseURLHelp}</p>}
           </FieldLabel>
-          <FieldLabel label="API Key">
-            <Input value={draft.api_key || ""} onChange={(e) => setDraft({ ...draft, api_key: e.target.value })} placeholder="sk-..." />
+          <FieldLabel label={selectedTypeConfig.apiKeyLabel}>
+            <Input
+              value={draft.api_key || ""}
+              onChange={(e) => setDraft({ ...draft, api_key: e.target.value })}
+              placeholder={selectedTypeConfig.apiKeyPlaceholder}
+            />
+            {selectedTypeConfig.apiKeyHelp && <p className="text-xs text-muted-foreground">{selectedTypeConfig.apiKeyHelp}</p>}
           </FieldLabel>
           <FieldLabel label={t("admin.userChannel")}>
             <select
@@ -1320,7 +1355,7 @@ function emptyUpstream(userChannelID?: number): Partial<UpstreamChannel> {
   return {
     user_channel_id: userChannelID || null,
     name: "",
-    type: "openai",
+    type: "completion",
     base_url: "",
     api_key: "",
     priority: 1,
@@ -1333,7 +1368,7 @@ function upstreamPayload(channel: Partial<UpstreamChannel>) {
   return {
     user_channel_id: channel.user_channel_id || null,
     name: channel.name || "",
-    type: channel.type || "openai",
+    type: channel.type || "completion",
     base_url: channel.base_url || "",
     api_key: channel.api_key || "",
     priority: Number(channel.priority ?? 1),
@@ -1392,7 +1427,6 @@ function browserSyncPath(format: string, customPath: string) {
     case "models":
       return "/models"
     case "api_models":
-    case "oneapi_models":
       return "/api/models"
     case "custom":
       return normalizeBrowserSyncPath(customPath)
@@ -1586,19 +1620,198 @@ function syncFormatOptionLabels(language: string) {
   ]
 }
 
-const providerTypes = [
-  { value: "completion", label: "OpenAI Chat Completions" },
-  { value: "responses", label: "OpenAI Responses" },
-  { value: "openai-video", label: "OpenAI Video" },
-  { value: "veo", label: "VEO" },
-  { value: "seedance", label: "Seedance" },
-  { value: "seedream", label: "Seedream" },
-  { value: "kling", label: "Kling" },
-  { value: "midjourney", label: "Midjourney" },
-  { value: "openai", label: "OpenAI" },
-  { value: "claude", label: "Claude" },
-  { value: "gemini", label: "Gemini" },
+interface ChannelTypeConfig {
+  value: string
+  label: string
+  defaultBaseURL?: string
+  baseURLPlaceholder?: string
+  baseURLHelp?: string
+  apiKeyLabel?: string
+  apiKeyPlaceholder?: string
+  apiKeyHelp?: string
+  defaultBaseURLAction?: string
+}
+
+const providerTypes: ChannelTypeConfig[] = [
+  {
+    value: "completion",
+    label: "OpenAI Chat Completions",
+    defaultBaseURL: "https://api.openai.com",
+    baseURLPlaceholder: "https://api.openai.com",
+  },
+  {
+    value: "responses",
+    label: "OpenAI Responses",
+    defaultBaseURL: "https://api.openai.com",
+    baseURLPlaceholder: "https://api.openai.com",
+  },
+  {
+    value: "openai-video",
+    label: "OpenAI Video",
+    defaultBaseURL: "https://api.openai.com",
+    baseURLPlaceholder: "https://api.openai.com",
+  },
+  {
+    value: "veo",
+    label: "VEO",
+    baseURLPlaceholder: "https://api.example.com",
+    baseURLHelp: "Uses the OpenAI video-compatible endpoint in this gateway.",
+  },
+  {
+    value: "seedance",
+    label: "Seedance",
+    defaultBaseURL: "https://ark.cn-beijing.volces.com",
+    baseURLPlaceholder: "https://ark.cn-beijing.volces.com",
+  },
+  {
+    value: "seedream",
+    label: "Seedream",
+    defaultBaseURL: "https://ark.cn-beijing.volces.com",
+    baseURLPlaceholder: "https://ark.cn-beijing.volces.com",
+  },
+  {
+    value: "kling",
+    label: "Kling",
+    defaultBaseURL: "https://api.klingai.com",
+    baseURLPlaceholder: "https://api.klingai.com",
+  },
+  { value: "midjourney", label: "Midjourney", baseURLPlaceholder: "https://api.example.com" },
+  {
+    value: "claude",
+    label: "Claude",
+    defaultBaseURL: "https://api.anthropic.com",
+    baseURLPlaceholder: "https://api.anthropic.com",
+    apiKeyPlaceholder: "sk-ant-...",
+  },
+  {
+    value: "gemini",
+    label: "Gemini",
+    defaultBaseURL: "https://generativelanguage.googleapis.com",
+    baseURLPlaceholder: "https://generativelanguage.googleapis.com",
+    apiKeyPlaceholder: "AIza...",
+    apiKeyHelp: "The gateway sends this as x-goog-api-key and query key where needed.",
+  },
+  {
+    value: "dashscope",
+    label: "Ali DashScope",
+    defaultBaseURL: "https://dashscope.aliyuncs.com",
+    baseURLPlaceholder: "https://dashscope.aliyuncs.com",
+  },
+  {
+    value: "deepseek",
+    label: "DeepSeek",
+    defaultBaseURL: "https://api.deepseek.com",
+    baseURLPlaceholder: "https://api.deepseek.com",
+    baseURLHelp: "Claude-compatible requests use /anthropic/v1/messages.",
+  },
+  {
+    value: "moonshot",
+    label: "Moonshot / Kimi",
+    defaultBaseURL: "https://api.moonshot.cn",
+    baseURLPlaceholder: "https://api.moonshot.cn",
+    baseURLHelp: "Claude-compatible requests use /anthropic/v1/messages.",
+  },
+  {
+    value: "zhipu_v4",
+    label: "Zhipu v4",
+    defaultBaseURL: "https://open.bigmodel.cn",
+    baseURLPlaceholder: "https://open.bigmodel.cn",
+    baseURLHelp: "Chat requests use /api/paas/v4/chat/completions.",
+  },
+  {
+    value: "xai",
+    label: "xAI",
+    defaultBaseURL: "https://api.x.ai",
+    baseURLPlaceholder: "https://api.x.ai",
+    baseURLHelp: "Model suffixes like -search, -high, and -low are handled by the adapter.",
+  },
+  {
+    value: "siliconflow",
+    label: "SiliconFlow",
+    defaultBaseURL: "https://api.siliconflow.cn",
+    baseURLPlaceholder: "https://api.siliconflow.cn",
+  },
+  {
+    value: "mistral",
+    label: "Mistral",
+    defaultBaseURL: "https://api.mistral.ai",
+    baseURLPlaceholder: "https://api.mistral.ai",
+  },
+  {
+    value: "openrouter",
+    label: "OpenRouter",
+    defaultBaseURL: "https://openrouter.ai/api",
+    baseURLPlaceholder: "https://openrouter.ai/api",
+    baseURLHelp: "Keep the /api prefix in the Base URL.",
+  },
+  {
+    value: "perplexity",
+    label: "Perplexity",
+    defaultBaseURL: "https://api.perplexity.ai",
+    baseURLPlaceholder: "https://api.perplexity.ai",
+  },
+  {
+    value: "lingyiwanwu",
+    label: "LingYiWanWu / 01.AI",
+    defaultBaseURL: "https://api.lingyiwanwu.com",
+    baseURLPlaceholder: "https://api.lingyiwanwu.com",
+  },
+  {
+    value: "mokaai",
+    label: "MokaAI",
+    defaultBaseURL: "https://api.moka.ai",
+    baseURLPlaceholder: "https://api.moka.ai",
+  },
+  {
+    value: "xinference",
+    label: "Xinference",
+    baseURLPlaceholder: "http://localhost:9997",
+    apiKeyLabel: "API Key (optional)",
+    apiKeyPlaceholder: "optional",
+  },
+  {
+    value: "submodel",
+    label: "Submodel",
+    defaultBaseURL: "https://llm.submodel.ai",
+    baseURLPlaceholder: "https://llm.submodel.ai",
+  },
+  {
+    value: "ollama",
+    label: "Ollama",
+    defaultBaseURL: "http://localhost:11434",
+    baseURLPlaceholder: "http://localhost:11434",
+    apiKeyLabel: "API Key (optional)",
+    apiKeyPlaceholder: "optional",
+  },
+  {
+    value: "qianfan_v2",
+    label: "Baidu Qianfan v2",
+    defaultBaseURL: "https://qianfan.baidubce.com",
+    baseURLPlaceholder: "https://qianfan.baidubce.com",
+  },
+  {
+    value: "minimax",
+    label: "MiniMax",
+    defaultBaseURL: "https://api.minimax.chat",
+    baseURLPlaceholder: "https://api.minimax.chat",
+  },
+  {
+    value: "volcengine",
+    label: "VolcEngine / Doubao",
+    defaultBaseURL: "https://ark.cn-beijing.volces.com",
+    baseURLPlaceholder: "https://ark.cn-beijing.volces.com",
+  },
 ]
+
+function channelTypeConfig(type: string): Required<Pick<ChannelTypeConfig, "apiKeyLabel" | "apiKeyPlaceholder" | "defaultBaseURLAction">> & ChannelTypeConfig {
+  const config = providerTypes.find((item) => item.value === type) || providerTypes.find((item) => item.value === "completion") || providerTypes[0]
+  return {
+    apiKeyLabel: "API Key",
+    apiKeyPlaceholder: "sk-...",
+    defaultBaseURLAction: "Default",
+    ...config,
+  }
+}
 
 const providerPresets = [
   { id: "openai", name: "OpenAI", iconURL: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg" },
