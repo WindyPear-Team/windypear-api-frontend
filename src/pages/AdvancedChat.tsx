@@ -10,7 +10,7 @@ import AdvancedChatFiles from "./AdvancedChatFiles"
 import Images from "./Images"
 import Videos from "./Videos"
 import AdvancedChatDevices from "./AdvancedChatDevices"
-import MessageChannels from "./MessageChannels"
+import MessageChannels from "./MessageChannelsWorkspace"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { Button } from "@/components/ui/button"
@@ -144,7 +144,7 @@ export default function AdvancedChat() {
                     <Route path="skills" element={<Skills />} />
                     <Route path="mcp" element={<AdvancedChatMCP />} />
                     <Route path="devices" element={<AdvancedChatDevices />} />
-                    {publicSettings.message_channel_enabled && <Route path="channels" element={<MessageChannels />} />}
+                    {publicSettings.message_channel_enabled && <Route path="channels/*" element={<MessageChannels />} />}
                     <Route path="images" element={<Images />} />
                     <Route path="videos" element={<Videos />} />
                     <Route path="files" element={<AdvancedChatFiles />} />
@@ -177,7 +177,7 @@ function AdvancedChatSidebar({ className, publicSettings, onNavigate }: { classN
     { href: "/chat/images", label: t("nav.images"), icon: Palette, active: location.pathname === "/chat/images" },
     { href: "/chat/videos", label: t("nav.videos"), icon: Video, active: location.pathname === "/chat/videos" },
     { href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" },
-    ...(publicSettings.message_channel_enabled ? [{ href: "/chat/channels", label: messageChannelsLabel, icon: MessageSquare, active: location.pathname === "/chat/channels" }] : []),
+    ...(publicSettings.message_channel_enabled ? [{ href: "/chat/channels", label: messageChannelsLabel, icon: MessageSquare, active: location.pathname.startsWith("/chat/channels") }] : []),
     { href: "/chat/agents", label: t("nav.agents"), icon: Bot, active: location.pathname === "/chat/agents" },
     { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" },
     { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" },
