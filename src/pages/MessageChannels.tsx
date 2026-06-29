@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Copy, MessageSquare, Plus, Save, Trash2 } from "lucide-react"
+import { Copy, MessageSquare, Plus, Power, Save, Trash2 } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -181,6 +181,7 @@ export default function MessageChannels() {
   const selectedUserChannel = catalog.find((item) => String(item.id) === draft.default_user_channel_id)
   const defaultModelOptions = selectedUserChannel?.models.length ? selectedUserChannel.models : modelOptions
   const providerConfig = parseProviderConfig(draft.advanced_options.custom_provider_config_json)
+  const qqConnectionMode = normalizeQQConnectionMode(providerConfig.connection_mode)
   const updateProviderConfig = (key: string, value: string) => {
     const next = { ...providerConfig }
     if (value.trim() === "") {
@@ -230,6 +231,15 @@ export default function MessageChannels() {
       queryClient.invalidateQueries({ queryKey: channelQueryKey })
     },
     onError: (err) => error(apiErrorMessage(err, copy.deleteFailed)),
+  })
+  const toggleChannel = useMutation({
+    mutationFn: async () => api.post(`/user/message-channels/${draft.id}/${draft.enabled ? "disable" : "enable"}`),
+    onSuccess: () => {
+      success(draft.enabled ? copy.disabledSaved : copy.enabledSaved)
+      setDraft((current) => ({ ...current, enabled: !current.enabled }))
+      queryClient.invalidateQueries({ queryKey: channelQueryKey })
+    },
+    onError: (err) => error(apiErrorMessage(err, copy.saveFailed)),
   })
 
   const startCreate = () => {
@@ -345,10 +355,16 @@ export default function MessageChannels() {
               <CardTitle className="text-base">{draft.id ? copy.editChannel : copy.newChannel}</CardTitle>
               <div className="flex flex-wrap gap-2">
                 {draft.id && (
-                  <Button variant="outline" className="gap-2 text-destructive hover:text-destructive" onClick={() => deleteChannel.mutate(draft.id!)} disabled={deleteChannel.isPending}>
-                    <Trash2 size={16} />
-                    {copy.delete}
-                  </Button>
+                  <>
+                    <Button variant="outline" className="gap-2" onClick={() => toggleChannel.mutate()} disabled={toggleChannel.isPending}>
+                      <Power size={16} />
+                      {draft.enabled ? copy.disableChannel : copy.enableChannel}
+                    </Button>
+                    <Button variant="outline" className="gap-2 text-destructive hover:text-destructive" onClick={() => deleteChannel.mutate(draft.id!)} disabled={deleteChannel.isPending}>
+                      <Trash2 size={16} />
+                      {copy.delete}
+                    </Button>
+                  </>
                 )}
                 <Button className="gap-2" onClick={() => saveChannel.mutate()} disabled={saveChannel.isPending}>
                   <Save size={16} />
@@ -386,6 +402,12 @@ export default function MessageChannels() {
               )}
               {draft.provider === "qq" && (
                 <>
+                  <Field label={copy.qqConnectionMode}>
+                    <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={qqConnectionMode} onChange={(event) => updateProviderConfig("connection_mode", event.target.value)}>
+                      <option value="webhook">{copy.qqConnectionWebhook}</option>
+                      <option value="websocket">{copy.qqConnectionWebSocket}</option>
+                    </select>
+                  </Field>
                   <Field label={copy.qqBotID}>
                     <Input value={providerConfig.bot_id || ""} placeholder="1020..." onChange={(event) => updateProviderConfig("bot_id", event.target.value)} />
                   </Field>
@@ -394,6 +416,16 @@ export default function MessageChannels() {
                   </Field>
                   <Field label={copy.qqBaseURL}>
                     <Input value={providerConfig.base_url || ""} placeholder="https://api.sgroup.qq.com" onChange={(event) => updateProviderConfig("base_url", event.target.value)} />
+                  </Field>
+                  <Field label={copy.qqTokenURL}>
+                    <Input value={providerConfig.token_url || ""} placeholder="https://bots.qq.com/app/getAppAccessToken" onChange={(event) => updateProviderConfig("token_url", event.target.value)} />
+                  </Field>
+                  <QQIntentsPicker copy={copy} value={providerConfig.intents || ""} onChange={(value) => updateProviderConfig("intents", value)} />
+                  <Field label={copy.qqShard}>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input value={providerConfig.shard_index || ""} placeholder="0" onChange={(event) => updateProviderConfig("shard_index", event.target.value)} />
+                      <Input value={providerConfig.shard_total || ""} placeholder="1" onChange={(event) => updateProviderConfig("shard_total", event.target.value)} />
+                    </div>
                   </Field>
                   <Field label={copy.qqMsgType}>
                     <Input value={providerConfig.msg_type || ""} placeholder="0" onChange={(event) => updateProviderConfig("msg_type", event.target.value)} />
@@ -408,7 +440,7 @@ export default function MessageChannels() {
               </Field>
             </div>
 
-            {activeChannel?.webhook_path && (
+            {activeChannel?.webhook_path && !(draft.provider === "qq" && qqConnectionMode === "websocket") && (
               <div className="grid gap-2 rounded-md border bg-muted/30 p-3 text-sm md:grid-cols-[120px_minmax(0,1fr)_auto] md:items-center">
                 <div className="font-medium">{copy.webhook}</div>
                 <div className="min-w-0 break-all rounded bg-background p-2 font-mono text-xs">{`${window.location.origin}${activeChannel.webhook_path}`}</div>
@@ -570,6 +602,29 @@ function SkillPicker({ label, skills, selected, onChange }: { label: string; ski
   )
 }
 
+function QQIntentsPicker({ copy, value, onChange }: { copy: typeof zhCopy; value: string; onChange: (value: string) => void }) {
+  const selected = parseQQIntentValue(value)
+  const toggle = (bit: number, checked: boolean) => {
+    const next = checked ? selected | bit : selected & ~bit
+    onChange(String(next || defaultQQIntentValue))
+  }
+  return (
+    <div className="space-y-2 text-sm md:col-span-2">
+      <div className="font-medium">{copy.qqIntents}</div>
+      <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
+        {qqIntentOptions.map((option) => (
+          <label key={option.bit} className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={(selected & option.bit) === option.bit} onChange={(event) => toggle(option.bit, event.target.checked)} />
+            <span className="min-w-0 flex-1 truncate">{copy[option.labelKey]}</span>
+            <span className="shrink-0 font-mono text-xs text-muted-foreground">{option.bit}</span>
+          </label>
+        ))}
+      </div>
+      <div className="text-xs text-muted-foreground">{copy.qqIntentsValue}: {selected}</div>
+    </div>
+  )
+}
+
 function draftToPayload(draft: Draft) {
   return {
     name: draft.name.trim(),
@@ -586,7 +641,7 @@ function draftToPayload(draft: Draft) {
     trigger_mode: draft.trigger_mode,
     system_prompt: draft.system_prompt,
     group_configs: draft.group_configs,
-    advanced_options: draft.advanced_options,
+    advanced_options: advancedOptionsForPayload(draft),
   }
 }
 
@@ -640,6 +695,33 @@ function normalizeChannel(value: unknown): MessageChannel | null {
 
 function providerUsesBotToken(provider: string) {
   return provider === "telegram" || provider === "discord"
+}
+
+const defaultQQIntentValue = 513
+const qqIntentOptions = [
+  { bit: 1, labelKey: "qqIntentGuilds" },
+  { bit: 512, labelKey: "qqIntentGuildMessages" },
+  { bit: 4096, labelKey: "qqIntentDirectMessage" },
+  { bit: 1 << 25, labelKey: "qqIntentGroupAndC2C" },
+  { bit: 1 << 30, labelKey: "qqIntentPublicGuildMessages" },
+] as const
+
+function parseQQIntentValue(value: string) {
+  const parsed = Number(value || defaultQQIntentValue)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultQQIntentValue
+}
+
+function advancedOptionsForPayload(draft: Draft): AdvancedOptions {
+  if (draft.provider !== "qq") {
+    return draft.advanced_options
+  }
+  const config = parseProviderConfig(draft.advanced_options.custom_provider_config_json)
+  config.connection_mode = normalizeQQConnectionMode(config.connection_mode)
+  return { ...draft.advanced_options, custom_provider_config_json: stringifyProviderConfig(config) }
+}
+
+function normalizeQQConnectionMode(value: unknown) {
+  return stringValue(value).toLowerCase() === "websocket" || stringValue(value).toLowerCase() === "ws" ? "websocket" : "webhook"
 }
 
 function normalizeAdvancedOptions(value: unknown): AdvancedOptions {
@@ -775,7 +857,19 @@ const zhCopy = {
   qqBotID: "QQ 机器人 ID",
   qqBotSecret: "QQ 机器人 Secret",
   qqBotSecretPlaceholder: "输入 QQ 机器人 Secret",
+  qqConnectionMode: "QQ 接入方式",
+  qqConnectionWebhook: "Webhook",
+  qqConnectionWebSocket: "WebSocket",
   qqBaseURL: "QQ 官方 API 地址",
+  qqTokenURL: "QQ 调用凭证地址",
+  qqIntents: "QQ 事件 Intents",
+  qqIntentsValue: "当前值",
+  qqIntentGuilds: "频道基础事件",
+  qqIntentGuildMessages: "频道消息事件",
+  qqIntentDirectMessage: "私信事件",
+  qqIntentGroupAndC2C: "群聊与单聊事件",
+  qqIntentPublicGuildMessages: "公域频道消息事件",
+  qqShard: "QQ 分片",
   qqMsgType: "QQ 消息类型",
   status: "状态",
   enabled: "启用",
@@ -814,6 +908,10 @@ const zhCopy = {
   saveFailed: "保存消息通道失败",
   delete: "删除",
   deleted: "消息通道已删除",
+  enabledSaved: "消息通道已启用",
+  disabledSaved: "消息通道已禁用",
+  enableChannel: "启用通道",
+  disableChannel: "禁用通道",
   deleteFailed: "删除消息通道失败",
 }
 
@@ -833,7 +931,19 @@ const enCopy: typeof zhCopy = {
   qqBotID: "QQ bot ID",
   qqBotSecret: "QQ bot secret",
   qqBotSecretPlaceholder: "Enter QQ bot secret",
+  qqConnectionMode: "QQ connection mode",
+  qqConnectionWebhook: "Webhook",
+  qqConnectionWebSocket: "WebSocket",
   qqBaseURL: "QQ Official API URL",
+  qqTokenURL: "QQ access token URL",
+  qqIntents: "QQ event intents",
+  qqIntentsValue: "Current value",
+  qqIntentGuilds: "Guild events",
+  qqIntentGuildMessages: "Guild message events",
+  qqIntentDirectMessage: "Direct messages",
+  qqIntentGroupAndC2C: "Group and C2C events",
+  qqIntentPublicGuildMessages: "Public guild messages",
+  qqShard: "QQ shard",
   qqMsgType: "QQ message type",
   status: "Status",
   enabled: "Enabled",
@@ -872,5 +982,9 @@ const enCopy: typeof zhCopy = {
   saveFailed: "Failed to save message channel",
   delete: "Delete",
   deleted: "Message channel deleted",
+  enabledSaved: "Message channel enabled",
+  disabledSaved: "Message channel disabled",
+  enableChannel: "Enable channel",
+  disableChannel: "Disable channel",
   deleteFailed: "Failed to delete message channel",
 }
